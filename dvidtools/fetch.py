@@ -59,17 +59,21 @@ def get_skeleton(bodyid, save_to=None, server=None, node=None):
         return swc
 
 
-def get_user_bookmarks(server=None, node=None, user=None):
+def get_user_bookmarks(server=None, node=None, user=None,
+                       return_dataframe=True):
     """ Get user bookmarks.
 
     Parameters
     ----------
-    server :    str, optional
-                If not provided, will try reading from global.
-    node :      str, optional
-                If not provided, will try reading from global.
-    user :      str, optional
-                If not provided, will try reading from global.                
+    server :            str, optional
+                        If not provided, will try reading from global.
+    node :              str, optional
+                        If not provided, will try reading from global.
+    user :              str, optional
+                        If not provided, will try reading from global.                
+    return_dataframe :  bool, optional
+                        If True, will return pandas.DataFrame. If False,
+                        returns original json.
 
     Returns
     -------
@@ -80,7 +84,10 @@ def get_user_bookmarks(server=None, node=None, user=None):
     
     r = requests.get('{}/api/node/{}/bookmark_annotations/tag/user:{}'.format(server, node, user))
 
-    return pd.DataFrame.from_records(r.json())
+    if return_dataframe:
+        return pd.DataFrame.from_records(r.json())
+    else:
+        return r.json()
 
 
 def add_bookmarks(data, verify=True, server=None, node=None):
