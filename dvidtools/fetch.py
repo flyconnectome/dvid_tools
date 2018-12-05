@@ -167,7 +167,8 @@ def get_todo_in_area(offset, size, server=None, node=None):
     return pd.DataFrame.from_records(r.json())
 
 
-def get_roi(roi, voxel_size=(64, 64, 64), server=None, node=None):
+def get_roi(roi, voxel_size=(32, 32, 32), server=None, node=None,
+            step_size=2):
     """ Get faces and vertices of ROI.
 
     Uses marching cube algorithm to extract surface model of block ROI.
@@ -181,12 +182,16 @@ def get_roi(roi, voxel_size=(64, 64, 64), server=None, node=None):
     server :        str, optional
                     If not provided, will try reading from global.
     node :          str, optional
-                    If not provided, will try reading from global.    
+                    If not provided, will try reading from global.
+    step_size :     int, optional
+                    Step size for marching cube algorithm.
+                    Smaller values = higher resolution but slower.
 
     Returns
     -------
-    vertices : numpy.ndarray
-    faces :    numpy.ndarray
+    vertices :      numpy.ndarray
+                    Coordinates are in nm.
+    faces :         numpy.ndarray
     """
     
     server, node, user = eval_param(server, node)
@@ -196,7 +201,8 @@ def get_roi(roi, voxel_size=(64, 64, 64), server=None, node=None):
     # The data returned are block coordinates: [x, y, z_start, z_end]
     blocks = np.array(r.json())
     
-    verts, faces = mesh.mesh_from_voxels(blocks, v_size=voxel_size)
+    verts, faces = mesh.mesh_from_voxels(blocks, v_size=voxel_size,
+                                         step_size=step_size)
     
     return verts, faces
 

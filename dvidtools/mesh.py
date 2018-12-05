@@ -42,11 +42,15 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
     # Use marching cubes to create surface model
     verts, faces, normals, values = marching_cubes_lewiner(mat,
                                                            level=.5,
+                                                           step_size=step_size,
                                                            allow_degenerate=False,
-                                                           gradient_direction='ascent',
+                                                           gradient_direction='ascent',                                                           
                                                            spacing=v_size)
 
     # Compensate for earlier block offset
     verts -= np.array(v_size)
+
+    # For unknown reasons, the x/y/z order is inverted during marching cubes
+    verts = verts[:, [2, 1, 0]]
 
     return verts, faces
