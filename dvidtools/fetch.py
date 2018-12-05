@@ -273,6 +273,13 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, n
 
 def get_segmentation_info(server=None, node=None):
     """ Returns segmentation info as dictionary.
+
+    Parameters
+    ----------
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
     """
 
     server, node, user = eval_param(server, node)
@@ -280,3 +287,111 @@ def get_segmentation_info(server=None, node=None):
     r = requests.get('{}/api/node/{}/segmentation/info'.format(server, node))
 
     return r.json()
+
+
+def get_n_synapses(bodyid, server=None, node=None):
+    """ Returns number of pre- and postsynapses associated with given
+    body.
+
+    Parameters
+    ----------
+    bodyid :    int | str
+                ID of body for which to download skeleton.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    dict 
+                ``{'PreSyn': int, 'PostSyn': int}
+    """
+
+    server, node, user = eval_param(server, node)
+
+    pre = requests.get('{}/api/node/{}/synapse_labelsz/count/{}/PreSyn'.format(server, node, bodyid)).json()
+    post = requests.get('{}/api/node/{}/synapse_labelsz/count/{}/PostSyn'.format(server, node, bodyid)).json()
+
+    return {'pre': pre.get('PreSyn', None), 'post': post.get('PostSyn', None)}
+
+
+def get_synapses(bodyid, server=None, node=None):
+    """ Returns table of pre- and postsynapses associated with given body.
+
+    Parameters
+    ----------
+    bodyid :    int | str
+                ID of body for which to download skeleton.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    pandas.DataFrame                 
+    """
+
+    server, node, user = eval_param(server, node)
+
+    r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=false'.format(server, node, bodyid))
+
+    return pd.DataFrame.from_records(r.json())
+
+
+def get_connectivity(bodyid, server=None, node=None):
+    """ Returns connectivity table for given body.
+
+    Parameters
+    ----------
+    bodyid :    int | str
+                ID of body for which to download skeleton.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    pandas.DataFrame                 
+    """
+
+    server, node, user = eval_param(server, node)
+
+    # Get synapses
+    r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=true'.format(server, node, bodyid))
+    syn = r.json()
+
+    # Compile connector table by counting # of synapses between neurons
+    connections = {'PreSynTo': {}, 'PostSynTo': {}}
+
+    # Collect positions and query the body IDs
+    pos = [cn['To'] for s in syn for cn in s['Rels']]
+    bodies = requests.request('GET',
+                              url="{}/api/node/{}/segmentation/labels".format(server, node),
+                              json=pos).json()
+
+    i = 0
+    for s in syn:
+        # Connections point to positions -> we have to map this to body IDs
+        for k, cn in enumerate(s['Rels']):
+            b = bodies[i+k]
+            connections[cn['Rel']][b] = connections[cn['Rel']].get(b, 0) + 1
+        i += k
+
+    pre = pd.DataFrame.from_dict(connections['PreSynTo'], orient='index')
+    pre.columns = ['n_synapses']
+    pre['relation'] = 'downstream'
+    pre.index.name = 'bodyid'
+
+    post = pd.DataFrame.from_dict(connections['PostSynTo'], orient='index')
+    post.columns = ['n_synapses']
+    post['relation'] = 'upstream'
+    post.index.name = 'bodyid'
+
+    cn_table = pd.concat([pre.reset_index(), post.reset_index()], axis=0)
+    cn_table.sort_values(['relation', 'n_synapses'], inplace=True, ascending=False)
+    cn_table.reset_index(drop=True, inplace=True)
+
+    return cn_table
