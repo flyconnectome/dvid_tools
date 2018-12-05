@@ -3,6 +3,7 @@
 
 from . import decode
 from . import mesh
+from . import utils
 
 import requests
 
@@ -79,7 +80,64 @@ def get_user_bookmarks(server=None, node=None, user=None):
     
     r = requests.get('{}/api/node/{}/bookmark_annotations/tag/user:{}'.format(server, node, user))
 
-    return pd.DataFrame.from_records(r.json())    
+    return pd.DataFrame.from_records(r.json())
+
+
+def add_bookmarks(data, verify=True, server=None, node=None):
+    """ Add or edit user bookmarks.
+
+    Please note that you will have to restart neutu to see the changes to
+    your user bookmarks.
+
+    Parameters
+    ----------
+    data :      list of dicts
+                Must be list of dicts. See example::
+
+                    [{'Pos': [21344, 21048, 22824],
+                      'Kind': 'Note',
+                      'Tags': ['user:schlegelp'],
+                      'Prop': {'body ID': '1671952694',
+                               'comment': 'mALT',
+                               'custom': '1',
+                               'status': '',
+                               'time': '',
+                               'type': 'Other',
+                               'user': 'schlegelp'}},
+                     ... ]
+
+    verify :    bool, optional
+                If True, will sanity check ``data`` against above example.
+                Do not skip unless you know exactly what you're doing!
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.               
+
+    Returns
+    -------
+    Nothing
+                
+    """
+    server, node, user = eval_param(server, node)
+
+    # Sanity check data
+    if not isinstance(data, list):
+        raise TypeError('Data must be list of dicts. '
+                        'See help(dvidtools.add_bookmarks)')    
+
+    if verify:
+        required = {'Pos': list, 'Kind': str, 'Tags': [str],
+                'Prop': {'body ID': str, 'comment': str, 'custom': str,
+                         'status': str, 'time': str, 'type': str,
+                         'user': str}}
+
+        utils.verify_payload(data, required=required, required_only=True)
+    
+    r = requests.post('{}/api/node/{}/bookmark_annotations/elements'.format(server, node),
+                      json=data)
+
+    return
 
 
 def get_annotation(bodyid, server=None, node=None, verbose=True):
@@ -88,7 +146,7 @@ def get_annotation(bodyid, server=None, node=None, verbose=True):
     Parameters
     ----------
     bodyid :    int | str
-                ID of body for which to download skeleton.
+                ID of body for which to get annotations..
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -110,6 +168,61 @@ def get_annotation(bodyid, server=None, node=None, verbose=True):
         if verbose:
             print(r.text)
         return {}
+
+
+def edit_annotation(bodyid, annotation, server=None, node=None):
+    """ Edit annotations for given body.
+
+    Parameters
+    ----------
+    bodyid :        int | str
+                    ID of body for which to edit annotations.
+    annotation :    dict
+                    Dictionary of new annotations. Any of the fields can be
+                    omitted in which case the value will be unchanged::
+
+                        {
+                         "status": str,
+                         "comment": str,
+                         "body ID": int,
+                         "name": str,
+                         "class": str,
+                         "user": str,
+                         "naming user": str
+                        }
+
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
+    verbose :       bool, optional
+                    If True, will print error if no annotation for body found.
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    >>> # Get annotations for given body
+    >>> an = dvidtools.get_annotation('1700937093')
+    >>> # Edit field
+    >>> an['name'] = 'New Name'
+    >>> # Update annotation 
+    >>> dvidtools.edit_annotation('1700937093', an)
+    """
+    server, node, user = eval_param(server, node)
+
+    # Sanity check
+    fields = {"status": str, "comment": str, "body ID": int, "name": str,
+              "user": str, "naming user": str} #"class": str
+
+    utils.verify_payload([annotation], fields, required_only=True)
+    
+    r = requests.post('{}/api/node/{}/segmentation_annotations/key/{}'.format(server, node, bodyid),
+                      json=annotation)
+    
+    return None
 
 
 def get_body_id(pos, server=None, node=None):
@@ -213,7 +326,7 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, n
     Parameters
     ----------
     bodyid :    int | str
-                ID of body for which to download skeleton.
+                ID of body for which to download mesh.
     scale :     int | "coarse", optional
                 Resolution of sparse volume starting with 0 where each level
                 beyond 0 has 1/2 resolution of previous level. "coarse" will
@@ -296,7 +409,7 @@ def get_n_synapses(bodyid, server=None, node=None):
     Parameters
     ----------
     bodyid :    int | str
-                ID of body for which to download skeleton.
+                ID of body for which to get number of synapses.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -322,7 +435,7 @@ def get_synapses(bodyid, server=None, node=None):
     Parameters
     ----------
     bodyid :    int | str
-                ID of body for which to download skeleton.
+                ID of body for which to get synapses.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -346,7 +459,7 @@ def get_connectivity(bodyid, server=None, node=None):
     Parameters
     ----------
     bodyid :    int | str
-                ID of body for which to download skeleton.
+                ID of body for which to get connectivity.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
