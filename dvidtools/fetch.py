@@ -178,8 +178,9 @@ def edit_annotation(bodyid, annotation, server=None, node=None):
     bodyid :        int | str
                     ID of body for which to edit annotations.
     annotation :    dict
-                    Dictionary of new annotations. Any of the fields can be
-                    omitted in which case the value will be unchanged::
+                    Dictionary of new annotations. Do not omit any of these
+                    fields as this will delete it from the entry on the
+                    server::
 
                         {
                          "status": str,
