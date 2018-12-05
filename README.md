@@ -39,3 +39,14 @@ body_id = '1700937093'
 dt.get_skeleton(body_id, save_to=body_id + '.swc')
 ```
 
+Get table of synapse locations
+```Python
+body_id = '1700937093'
+syn = dt.get_synapses(body_id)
+```
+
+Get synaptic partners of a neuron
+```Python
+body_id = '1700937093'
+partners = dt.get_connectivity(body_id)
+```
