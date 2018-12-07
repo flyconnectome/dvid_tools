@@ -11,6 +11,8 @@ import requests
 import numpy as np
 import pandas as pd
 
+from tqdm import tqdm
+
 
 def set_param(server=None, node=None, user=None):
     """ Set default server, node and/or user."""
@@ -546,25 +548,25 @@ def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
 
     Parameters
     ----------
-    bodyid :    int | str
-                ID of body for which to get connectivity.
-    filter :    function, optional
-                Function to filter synapses by position. Must accept numpy
-                array (N, 3) and return array of [True, False, ...]
-    server :    str, optional
-                If not provided, will try reading from global.
-    node :      str, optional
-                If not provided, will try reading from global.
+    bodyid :        int | str
+                    ID of body for which to get connectivity.
+    pos_filter :    function, optional
+                    Function to filter synapses by position. Must accept numpy
+                    array (N, 3) and return array of [True, False, ...]
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
 
     Returns
     -------
-    pandas.DataFrame    
+    pandas.DataFrame
 
     """
 
     if isinstance(bodyid, (list, np.ndarray)):
         cn = [get_connectivity(b, pos_filter=pos_filter,
-                               server=server, node=node) for b in bodyid]
+                               server=server, node=node) for b in tqdm(bodyid)]
         cn = functools.reduce(lambda left,right: pd.merge(left, right,
                                                           on=['bodyid',
                                                               'relation'],
@@ -579,6 +581,10 @@ def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
 
     # Get synapses
     r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=true'.format(server, node, bodyid))
+
+    # Raise
+    r.raise_for_status()
+
     syn = r.json()
 
     if pos_filter:
@@ -589,26 +595,25 @@ def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
             raise ValueError('No synapses left after filtering.')
 
         # Filter synapses
-        syn = np.array(syn)[filtered]
+        syn = np.array(syn)[filtered]    
 
-    # Compile connector table by counting # of synapses between neurons
-    connections = {'PreSynTo': {}, 'PostSynTo': {}}
-
-    # Collect positions and query the body IDs
+    # Collect positions and query the body IDs of pre-/postsynaptic neurons
     pos = [cn['To'] for s in syn for cn in s['Rels']]
-
     bodies = requests.request('GET',
                               url="{}/api/node/{}/segmentation/labels".format(server, node),
                               json=pos).json()
 
+    # Compile connector table by counting # of synapses between neurons
+    connections = {'PreSynTo': {}, 'PostSynTo': {}}
     i = 0
     for s in syn:
         # Connections point to positions -> we have to map this to body IDs
         for k, cn in enumerate(s['Rels']):
             b = bodies[i+k]
             connections[cn['Rel']][b] = connections[cn['Rel']].get(b, 0) + 1
-        i += k
+        i += k + 1
 
+    # Generate connection table
     pre = pd.DataFrame.from_dict(connections['PreSynTo'], orient='index')
     pre.columns = ['n_synapses']
     pre['relation'] = 'downstream'
@@ -619,6 +624,7 @@ def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
     post['relation'] = 'upstream'
     post.index.name = 'bodyid'
 
+    # Combine up- and downstream
     cn_table = pd.concat([pre.reset_index(), post.reset_index()], axis=0)
     cn_table.sort_values(['relation', 'n_synapses'], inplace=True, ascending=False)
     cn_table.reset_index(drop=True, inplace=True)
