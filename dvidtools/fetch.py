@@ -82,7 +82,7 @@ def get_user_bookmarks(server=None, node=None, user=None,
 
     Returns
     -------
-    bookmarks : pandas.DataFrame
+    bookmarks : pandas.DataFrame or json
                 
     """
     server, node, user = eval_param(server, node, user)
@@ -90,7 +90,10 @@ def get_user_bookmarks(server=None, node=None, user=None,
     r = requests.get('{}/api/node/{}/bookmark_annotations/tag/user:{}'.format(server, node, user))
 
     if return_dataframe:
-        return pd.DataFrame.from_records(r.json())
+        data = r.json()
+        for d in data:
+            d.update(d.pop('Prop'))
+        return pd.DataFrame.from_records(data)
     else:
         return r.json()
 
