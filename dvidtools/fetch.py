@@ -5,6 +5,7 @@ from . import decode
 from . import mesh
 from . import utils
 
+import functools
 import requests
 
 import numpy as np
@@ -12,9 +13,11 @@ import pandas as pd
 
 
 def set_param(server=None, node=None, user=None):
+    """ Set default server, node and/or user."""
     for p, n in zip([server, node, user], ['server', 'node', 'user']):
         if not isinstance(p, type(None)):
             globals()[n] = p
+
 
 def eval_param(server=None, node=None, user=None):
     """ Helper to read globally defined settings."""    
@@ -24,6 +27,7 @@ def eval_param(server=None, node=None, user=None):
             parsed[n] = globals().get(n, None)
         else:
             parsed[n] = p
+
     return [parsed[n] for n in ['server', 'node', 'user']]
 
 
@@ -195,9 +199,7 @@ def edit_annotation(bodyid, annotation, server=None, node=None):
     bodyid :        int | str
                     ID of body for which to edit annotations.
     annotation :    dict
-                    Dictionary of new annotations. Do not omit any of these
-                    fields as this will delete it from the entry on the
-                    server::
+                    Dictionary of new annotations. Possible fields are::
 
                         {
                          "status": str,
@@ -209,12 +211,12 @@ def edit_annotation(bodyid, annotation, server=None, node=None):
                          "naming user": str
                         }
 
+                    Fields other than the above will be ignored!
+
     server :        str, optional
                     If not provided, will try reading from global.
     node :          str, optional
                     If not provided, will try reading from global.
-    verbose :       bool, optional
-                    If True, will print error if no annotation for body found.
 
     Returns
     -------
@@ -621,4 +623,4 @@ def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
     cn_table.sort_values(['relation', 'n_synapses'], inplace=True, ascending=False)
     cn_table.reset_index(drop=True, inplace=True)
 
-    return cn_table
+    return cn_table[['bodyid', 'relation', 'n_synapses']]
