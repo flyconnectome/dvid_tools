@@ -481,13 +481,16 @@ def get_synapses(bodyid, server=None, node=None):
     return pd.DataFrame.from_records(r.json())
 
 
-def get_connectivity(bodyid, server=None, node=None):
+def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
     """ Returns connectivity table for given body.
 
     Parameters
     ----------
     bodyid :    int | str
                 ID of body for which to get connectivity.
+    filter :    function, optional
+                Function to filter synapses by position. Must accept numpy
+                array (N, 3) and return array of [True, False, ...]
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -495,8 +498,22 @@ def get_connectivity(bodyid, server=None, node=None):
 
     Returns
     -------
-    pandas.DataFrame                 
+    pandas.DataFrame    
+
     """
+
+    if isinstance(bodyid, (list, np.ndarray)):
+        cn = [get_connectivity(b, pos_filter=pos_filter,
+                               server=server, node=node) for b in bodyid]
+        cn = functools.reduce(lambda left,right: pd.merge(left, right,
+                                                          on=['bodyid',
+                                                              'relation'],
+                                                          how='outer'),
+                              cn)
+        cn = cn.fillna(0)
+        cn.columns = np.append(cn.columns[:2], bodyid)
+        cn['total'] = cn[bodyid].sum(axis=1)
+        return cn.sort_values(['relation', 'total'], ascending=False).reset_index(drop=True)
 
     server, node, user = eval_param(server, node)
 
@@ -504,11 +521,22 @@ def get_connectivity(bodyid, server=None, node=None):
     r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=true'.format(server, node, bodyid))
     syn = r.json()
 
+    if pos_filter:
+        # Get filter
+        filtered = pos_filter(np.array([s['Pos'] for s in syn]))
+
+        if not any(filtered):
+            raise ValueError('No synapses left after filtering.')
+
+        # Filter synapses
+        syn = np.array(syn)[filtered]
+
     # Compile connector table by counting # of synapses between neurons
     connections = {'PreSynTo': {}, 'PostSynTo': {}}
 
     # Collect positions and query the body IDs
     pos = [cn['To'] for s in syn for cn in s['Rels']]
+
     bodies = requests.request('GET',
                               url="{}/api/node/{}/segmentation/labels".format(server, node),
                               json=pos).json()
