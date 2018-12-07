@@ -50,13 +50,18 @@ def get_skeleton(bodyid, save_to=None, server=None, node=None):
     server, node, user = eval_param(server, node)
     
     r = requests.get('{}/api/node/{}/segmentation_skeletons/key/{}_swc'.format(server, node, bodyid))
-    swc = r.text
-                     
+
+    #r.raise_for_status()
+
+    if 'not found' in r.text:
+        print(r.text)
+        return None
+                 
     if save_to:
         with open(save_to, 'w') as f:
-            f.write(swc)
+            f.write(r.text)
     else:
-        return swc
+        return r.text
 
 
 def get_user_bookmarks(server=None, node=None, user=None,
@@ -144,6 +149,8 @@ def add_bookmarks(data, verify=True, server=None, node=None):
     r = requests.post('{}/api/node/{}/bookmark_annotations/elements'.format(server, node),
                       json=data)
 
+    r.raise_for_status()
+
     return
 
 
@@ -229,6 +236,8 @@ def edit_annotation(bodyid, annotation, server=None, node=None):
     
     r = requests.post('{}/api/node/{}/segmentation_annotations/key/{}'.format(server, node, bodyid),
                       json=annotation)
+    # Check if it worked
+    r.raise_for_status()
     
     return None
 
@@ -431,8 +440,13 @@ def get_n_synapses(bodyid, server=None, node=None):
 
     server, node, user = eval_param(server, node)
 
-    pre = requests.get('{}/api/node/{}/synapse_labelsz/count/{}/PreSyn'.format(server, node, bodyid)).json()
-    post = requests.get('{}/api/node/{}/synapse_labelsz/count/{}/PostSyn'.format(server, node, bodyid)).json()
+    r = requests.get('{}/api/node/{}/synapses_labelsz/count/{}/PreSyn'.format(server, node, bodyid))
+    r.raise_for_status()
+    pre = r.json()
+
+    r = requests.get('{}/api/node/{}/synapses_labelsz/count/{}/PostSyn'.format(server, node, bodyid))
+    r.raise_for_status()
+    post = r.json()
 
     return {'pre': pre.get('PreSyn', None), 'post': post.get('PostSyn', None)}
 
