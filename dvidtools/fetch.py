@@ -223,19 +223,20 @@ def edit_annotation(bodyid, annotation, server=None, node=None):
     >>> an = dvidtools.get_annotation('1700937093')
     >>> # Edit field
     >>> an['name'] = 'New Name'
-    >>> # Update annotation 
+    >>> # Update annotation
     >>> dvidtools.edit_annotation('1700937093', an)
     """
     server, node, user = eval_param(server, node)
 
-    # Sanity check
-    fields = {"status": str, "comment": str, "body ID": int, "name": str,
-              "user": str, "naming user": str} #"class": str
+    # Get existing annotations
+    old_an = get_annotation(bodyid, server=server, node=node)
 
-    utils.verify_payload([annotation], fields, required_only=True)
+    # Compile new annotations
+    new_an = {k: annotation.get(k, v) for k, v in old_an.items()}
     
     r = requests.post('{}/api/node/{}/segmentation_annotations/key/{}'.format(server, node, bodyid),
-                      json=annotation)
+                      json=new_an)
+
     # Check if it worked
     r.raise_for_status()
     
