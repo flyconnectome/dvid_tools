@@ -468,6 +468,12 @@ def get_synapses(bodyid, server=None, node=None):
     pandas.DataFrame                 
     """
 
+    if isinstance(bodyid, (list, np.ndarray)):
+        tables = [get_synapses(b, server, node) for b in bodyid]
+        for b, tbl in zip(bodyid, tables):
+            tbl['bodyid'] = b
+        return pd.concat(tables, axis=0)
+
     server, node, user = eval_param(server, node)
 
     r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=false'.format(server, node, bodyid))
