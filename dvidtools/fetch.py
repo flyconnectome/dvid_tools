@@ -265,6 +265,60 @@ def get_body_id(pos, server=None, node=None):
     return r.json()['Label']
 
 
+def get_multiple_bodyids(pos, server=None, node=None):
+    """ Get body IDs at given positions.
+
+    Parameters
+    ----------
+    pos :       iterable
+                [[x1, y1, z1], [x2, y2, z2], ..] positions to query.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.    
+
+    Returns
+    -------
+    body_ids :  list
+    """
+    server, node, user = eval_param(server, node)
+
+    if isinstance(pos, np.ndarray):
+        pos = pos.tolist()
+    
+    bodies = requests.request('GET',
+                              url="{}/api/node/{}/segmentation/labels".format(server, node),
+                              json=pos).json()
+
+    return bodies
+
+
+def get_body_profile(bodyid, server=None, node=None):
+    """ Get body profile (n voxels, n blocks, bounding box)
+
+    Parameters
+    ----------
+    bodid :     str | int
+                Body id.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.    
+
+    Returns
+    -------
+    profile :   dict
+    """
+    server, node, user = eval_param(server, node)
+    
+    r = requests.request('GET',
+                              url="{}/api/node/{}/segmentation/sparsevol-size/{}".format(server, node, bodyid))
+
+    r.raise_for_status()
+
+    return r.json()
+
+
 def get_todo_in_area(offset, size, server=None, node=None):
     """ Get TODO tags in given 3D area.
 
