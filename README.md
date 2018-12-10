@@ -26,11 +26,8 @@ Get user bookmarks and add annotations
 # Get bookmarks
 bm = dt.get_user_bookmarks()
 
-# Write body ID in column
-bm['BodyID'] = bm.Prop.map(lambda x : x['body ID'])
-
-# Fetch annotations
-bm['BodyName'] = bm.BodyID.map(lambda x: dt.get_annotation(x).get('name', None))
+# Add column with neuron name (if available)
+bm['body name'] = bm['body ID'].map(lambda x: dt.get_annotation(x).get('name', None))
 ```
 
 Fetch and save SWC for a single neuron
@@ -49,4 +46,15 @@ Get synaptic partners of a neuron
 ```Python
 body_id = '1700937093'
 partners = dt.get_connectivity(body_id)
+```
+
+Get connectivity in given ROI using pymaid
+```Python
+import pymaid
+
+# Get the LH ROI
+lh = pymaid.Volume(*dt.get_roi('LH'))
+
+# Fetch connectivity but use filter function
+lh_partners = dt.get_connectivity(body_id, pos_filter=lambda x: pymaid.in_volume(x, lh))
 ```
