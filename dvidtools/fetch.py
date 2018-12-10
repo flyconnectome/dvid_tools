@@ -630,3 +630,57 @@ def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
     cn_table.reset_index(drop=True, inplace=True)
 
     return cn_table[['bodyid', 'relation', 'n_synapses']]
+
+
+def get_adjacency(sources, targets=None, pos_filter=None,
+                  server=None, node=None):
+    """ Get adjacency between sources and targets.
+
+    Parameters
+    ----------
+    sources :       iterable
+                    Body IDs of sources.
+    targets :       iterable, optional
+                    Body IDs of targets. If not provided, targets = sources.
+    pos_filter :    function, optional
+                    Function to filter synapses by position. Must accept numpy
+                    array (N, 3) and return array of [True, False, ...]
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
+
+    Returns
+    -------
+    adjacency matrix :  pandas.DataFrame
+                        Sources = rows; targets = columns
+    """
+
+    server, node, user = eval_param(server, node)
+
+    if not isinstance(sources, (list, tuple, np.ndarray)):
+        sources = [sources]
+
+    if isinstance(targets, type(None)):
+        targets = sources
+    elif not isinstance(targets, (list, tuple, np.ndarray)):
+        targets = [targets]
+
+    # Make sure we query the smaller population from the server
+    if len(targets) <= len(sources):
+        columns, index, relation, to_transpose = targets, sources, 'upstream', False
+    else:
+        columns, index, relation, to_transpose = sources, targets, 'downstream', True
+
+    # Get connectivity
+    cn = get_connectivity(columns, pos_filter=pos_filter,
+                          server=server, node=node)
+
+    # Subset connectivity to source -> target
+    cn = cn[cn.relation==relation].set_index('bodyid')
+    cn = cn.reindex(index=index, columns=columns, fill_value=0)
+
+    if to_transpose:
+        cn = cn.T
+
+    return cn
