@@ -517,17 +517,20 @@ def get_n_synapses(bodyid, server=None, node=None):
     return {'pre': pre.get('PreSyn', None), 'post': post.get('PostSyn', None)}
 
 
-def get_synapses(bodyid, server=None, node=None):
+def get_synapses(bodyid, pos_filter=None, server=None, node=None):
     """ Returns table of pre- and postsynapses associated with given body.
 
     Parameters
     ----------
-    bodyid :    int | str
-                ID of body for which to get synapses.
-    server :    str, optional
-                If not provided, will try reading from global.
-    node :      str, optional
-                If not provided, will try reading from global.
+    bodyid :        int | str
+                    ID of body for which to get synapses.
+    pos_filter :    function, optional
+                    Function to filter synapses by position. Must accept numpy
+                    array (N, 3) and return array of [True, False, ...]
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
 
     Returns
     -------
@@ -535,7 +538,8 @@ def get_synapses(bodyid, server=None, node=None):
     """
 
     if isinstance(bodyid, (list, np.ndarray)):
-        tables = [get_synapses(b, server, node) for b in bodyid]
+        tables = [get_synapses(b, pos_filter, server, node) for b in tqdm(bodyid,
+                                                              desc='Fetching')]
         for b, tbl in zip(bodyid, tables):
             tbl['bodyid'] = b
         return pd.concat(tables, axis=0)
@@ -544,7 +548,18 @@ def get_synapses(bodyid, server=None, node=None):
 
     r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=false'.format(server, node, bodyid))
 
-    return pd.DataFrame.from_records(r.json())
+    syn = r.json()
+
+    if pos_filter:
+        # Get filter
+        filtered = pos_filter(np.array([s['Pos'] for s in syn]))
+
+        if not any(filtered):
+            raise ValueError('No synapses left after filtering.')
+
+        syn = np.array(syn)[filtered]
+
+    return pd.DataFrame.from_records(syn)
 
 
 def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
@@ -599,7 +614,7 @@ def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
             raise ValueError('No synapses left after filtering.')
 
         # Filter synapses
-        syn = np.array(syn)[filtered]    
+        syn = np.array(syn)[filtered]
 
     # Collect positions and query the body IDs of pre-/postsynaptic neurons
     pos = [cn['To'] for s in syn for cn in s['Rels']]
