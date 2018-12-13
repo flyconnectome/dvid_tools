@@ -502,6 +502,10 @@ def get_n_synapses(bodyid, server=None, node=None):
 
     server, node, user = eval_param(server, node)
 
+    if isinstance(bodyid, (list, np.ndarray)):
+        syn = {b: get_n_synapses(b, server, node) for b in bodyid}
+        return pd.DataFrame.from_records(syn).T
+
     r = requests.get('{}/api/node/{}/synapses_labelsz/count/{}/PreSyn'.format(server, node, bodyid))
     r.raise_for_status()
     pre = r.json()
