@@ -1,10 +1,17 @@
 # dvid_tools
-Python tools to query DVID server.
+Python tools to query [DVID](https://github.com/janelia-flyem/dvid) server.
+
+## Install
+
+```Python
+`pip3 install git+git://github.com/flyconnectome/dvid_tools@master`
+```
 
 ## Dependencies
 - numpy
 - pandas
 - scikit-image
+- tqdm
 
 ## Examples
 
@@ -48,7 +55,7 @@ body_id = '1700937093'
 partners = dt.get_connectivity(body_id)
 ```
 
-Get connectivity in given ROI using pymaid
+Get connectivity in given ROI using [pymaid](https://pymaid.readthedocs.io)
 ```Python
 import pymaid
 
