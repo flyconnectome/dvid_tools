@@ -3,8 +3,11 @@ Python tools to query [DVID](https://github.com/janelia-flyem/dvid) server.
 
 ## Install
 
+Make sure you have [Python3](https://www.python.org),
+[pip3](https://pip.pypa.io/en/stable/installing/) and
+[git](https://git-scm.com) installed. Then run this in terminal
 ```Python
-`pip3 install git+git://github.com/flyconnectome/dvid_tools@master`
+pip3 install git+git://github.com/flyconnectome/dvid_tools@master
 ```
 
 ## Dependencies
