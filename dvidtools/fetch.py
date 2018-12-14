@@ -402,6 +402,9 @@ def get_roi(roi, voxel_size=(32, 32, 32), server=None, node=None,
     step_size :     int, optional
                     Step size for marching cube algorithm.
                     Smaller values = higher resolution but slower.
+    return_raw :    bool, optional
+                    If True, will return raw block data instead of faces and
+                    verts. Might not exists for all ROIs!
 
     Returns
     -------
@@ -414,10 +417,15 @@ def get_roi(roi, voxel_size=(32, 32, 32), server=None, node=None,
     
     r = requests.get('{}/api/node/{}/{}/roi'.format(server, node, roi))
     
-    # The data returned are block coordinates: [x, y, z_start, z_end]
-    blocks = np.array(r.json())
+    r.raise_for_status()
     
-    verts, faces = mesh.mesh_from_voxels(blocks, v_size=voxel_size,
+    # The data returned are block coordinates: [x, y, z_start, z_end]
+    blocks = r.json()
+
+    if return_raw:
+        return blocks
+    
+    verts, faces = mesh.mesh_from_voxels(np.array(blocks), v_size=voxel_size,
                                          step_size=step_size)
     
     return verts, faces
