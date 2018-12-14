@@ -635,20 +635,23 @@ def get_synapses(bodyid, pos_filter=None, server=None, node=None):
     return pd.DataFrame.from_records(syn)
 
 
-def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
+def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
+                     server=None, node=None):
     """ Returns connectivity table for given body.
 
     Parameters
     ----------
-    bodyid :        int | str
-                    ID of body for which to get connectivity.
-    pos_filter :    function, optional
-                    Function to filter synapses by position. Must accept numpy
-                    array (N, 3) and return array of [True, False, ...]
-    server :        str, optional
-                    If not provided, will try reading from global.
-    node :          str, optional
-                    If not provided, will try reading from global.
+    bodyid :            int | str
+                        ID of body for which to get connectivity.
+    pos_filter :        function, optional
+                        Function to filter synapses by position. Must accept
+                        numpy array (N, 3) and return array of [True, False, ...]
+    ignore_autapses :   bool, optional
+                        If True, will ignore autapses.
+    server :            str, optional
+                        If not provided, will try reading from global.
+    node :              str, optional
+                        If not provided, will try reading from global.
 
     Returns
     -------
@@ -658,6 +661,7 @@ def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
 
     if isinstance(bodyid, (list, np.ndarray)):
         cn = [get_connectivity(b, pos_filter=pos_filter,
+                               ignore_autapses=ignore_autapses,
                                server=server, node=node) for b in tqdm(bodyid)]
         cn = functools.reduce(lambda left,right: pd.merge(left, right,
                                                           on=['bodyid',
@@ -721,10 +725,14 @@ def get_connectivity(bodyid, pos_filter=None, server=None, node=None):
     cn_table.sort_values(['relation', 'n_synapses'], inplace=True, ascending=False)
     cn_table.reset_index(drop=True, inplace=True)
 
+    if ignore_autapses:
+        to_drop = cn_table.index[cn_table.bodyid==int(bodyid)]        
+        cn_table = cn_table.drop(index=to_drop).reset_index()
+
     return cn_table[['bodyid', 'relation', 'n_synapses']]
 
 
-def get_adjacency(sources, targets=None, pos_filter=None,
+def get_adjacency(sources, targets=None, pos_filter=None, ignore_autapses=True,
                   server=None, node=None):
     """ Get adjacency between sources and targets.
 
@@ -766,6 +774,7 @@ def get_adjacency(sources, targets=None, pos_filter=None,
 
     # Get connectivity
     cn = get_connectivity(columns, pos_filter=pos_filter,
+                          ignore_autapses=ignore_autapses,
                           server=server, node=node)
 
     # Subset connectivity to source -> target
