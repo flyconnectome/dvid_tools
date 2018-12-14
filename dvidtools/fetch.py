@@ -359,8 +359,32 @@ def get_todo_in_area(offset, size, server=None, node=None):
     return pd.DataFrame.from_records(r.json())
 
 
+def get_available_rois(server=None, node=None, step_size=2):
+    """ Get a list of all available ROIs in given node.
+
+    Parameters
+    ----------
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.    
+
+    Returns
+    -------
+    list
+    """
+    
+    server, node, user = eval_param(server, node)
+    
+    r = requests.get('{}/api/node/{}/rois/keys'.format(server, node))
+
+    r.raise_for_status()    
+    
+    return r.json()
+
+
 def get_roi(roi, voxel_size=(32, 32, 32), server=None, node=None,
-            step_size=2):
+            step_size=2, return_raw=False):
     """ Get faces and vertices of ROI.
 
     Uses marching cube algorithm to extract surface model of block ROI.
