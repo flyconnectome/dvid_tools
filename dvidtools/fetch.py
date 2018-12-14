@@ -431,6 +431,47 @@ def get_roi(roi, voxel_size=(32, 32, 32), server=None, node=None,
     return verts, faces
 
 
+def get_roi2(roi, save_to=None, server=None, node=None):
+    """ Get `.obj` for ROI.
+
+
+    Parameters
+    ----------
+    roi :           str
+                    Name of ROI.
+    save_to :       str | None, optional
+                    If provided, will not return string but instead
+                    save as file.
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
+
+    Returns
+    -------
+    str
+    """
+    
+    server, node, user = eval_param(server, node)
+    
+    # Get the key for this roi
+    r = requests.get('{}/api/node/{}/rois/key/{}'.format(server, node, roi))
+    r.raise_for_status()
+    key = r.json()['->']['key']
+
+    # Get the obj string
+    r = requests.get('{}/api/node/{}/roi_data/key/{}'.format(server, node, key))
+    r.raise_for_status()
+
+    if save_to:
+        with open(save_to, 'w') as f:
+            f.write(r.text)
+        return
+    
+    # The data returned is in .obj format
+    return r.text
+
+
 def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, node=None):
     """ Get neuron as mesh.
 
