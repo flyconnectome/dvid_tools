@@ -1,11 +1,12 @@
-# dvid_tools
-Python tools to query [DVID](https://github.com/janelia-flyem/dvid) server.
+# dvidtools
+Python tools to fetch data from [DVID](https://github.com/janelia-flyem/dvid) servers.
 
 ## Install
 
-Make sure you have [Python3](https://www.python.org),
-[pip3](https://pip.pypa.io/en/stable/installing/) and
-[git](https://git-scm.com) installed. Then run this in terminal
+Make sure you have [Python 3](https://www.python.org),
+[pip](https://pip.pypa.io/en/stable/installing/) and
+[git](https://git-scm.com) installed. Then run this in terminal:
+
 ```Python
 pip3 install git+git://github.com/flyconnectome/dvid_tools@master
 ```
@@ -22,8 +23,8 @@ Setting up
 ```Python
 import dvidtools as dt 
 
-# You can pass these parameters explicitly to each function but defining
-# them globally is more convenient
+# You can pass these parameters explicitly to each function
+# but defining them globally is more convenient
 server = 'http://emdata3.int.janelia.org:8900'
 node = '54f7'
 user = 'schlegelp'
