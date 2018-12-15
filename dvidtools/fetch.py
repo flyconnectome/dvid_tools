@@ -660,16 +660,24 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
     """
 
     if isinstance(bodyid, (list, np.ndarray)):
+        bodyid = np.array(bodyid).astype(str)
+
         cn = [get_connectivity(b, pos_filter=pos_filter,
                                ignore_autapses=ignore_autapses,
                                server=server, node=node) for b in tqdm(bodyid)]
-        cn = functools.reduce(lambda left,right: pd.merge(left, right,
-                                                          on=['bodyid',
-                                                              'relation'],
-                                                          how='outer'),
-                              cn)
+
+        # Concatenate the DataFrames
+        conc = []
+        for r in ['upstream', 'downstream']:
+            this_r = [d[d.relation==r].set_index('bodyid').drop('relation', axis=1) for d in cn]
+            this_r = pd.concat(this_r, axis=1)
+            this_r.columns = bodyid
+            this_r['relation'] = r
+            this_r = this_r[np.append('relation', bodyid)]
+            conc.append(this_r.reset_index(drop=False))
+
+        cn = pd.concat(conc, axis=0).reset_index(drop=True)
         cn = cn.fillna(0)
-        cn.columns = np.append(cn.columns[:2], bodyid)
         cn['total'] = cn[bodyid].sum(axis=1)
         return cn.sort_values(['relation', 'total'], ascending=False).reset_index(drop=True)
 
@@ -688,7 +696,8 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
         filtered = pos_filter(np.array([s['Pos'] for s in syn]))
 
         if not any(filtered):
-            raise ValueError('No synapses left after filtering.')
+            pass
+            #raise ValueError('No synapses left after filtering.')
 
         # Filter synapses
         syn = np.array(syn)[filtered]
@@ -709,15 +718,23 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
             connections[cn['Rel']][b] = connections[cn['Rel']].get(b, 0) + 1
         i += k + 1
 
-    # Generate connection table
-    pre = pd.DataFrame.from_dict(connections['PreSynTo'], orient='index')
-    pre.columns = ['n_synapses']
-    pre['relation'] = 'downstream'
+    if connections['PreSynTo']:
+        # Generate connection table
+        pre = pd.DataFrame.from_dict(connections['PreSynTo'], orient='index')
+        pre.columns = ['n_synapses']
+        pre['relation'] = 'downstream'
+    else:
+        pre = pd.DataFrame([], columns=['n_synapses', 'relation'])
+        pre.index = pre.index.astype(np.int64)
     pre.index.name = 'bodyid'
 
-    post = pd.DataFrame.from_dict(connections['PostSynTo'], orient='index')
-    post.columns = ['n_synapses']
-    post['relation'] = 'upstream'
+    if connections['PostSynTo']:
+        post = pd.DataFrame.from_dict(connections['PostSynTo'], orient='index')
+        post.columns = ['n_synapses']
+        post['relation'] = 'upstream'        
+    else:
+        post = pd.DataFrame([], columns=['n_synapses', 'relation'])
+        post.index = post.index.astype(np.int64)
     post.index.name = 'bodyid'
 
     # Combine up- and downstream
@@ -766,6 +783,10 @@ def get_adjacency(sources, targets=None, pos_filter=None, ignore_autapses=True,
     elif not isinstance(targets, (list, tuple, np.ndarray)):
         targets = [targets]
 
+    # Make sure we don't have any duplicates
+    sources = np.array(list(set(sources))).astype(str)
+    targets = np.array(list(set(targets))).astype(str)    
+
     # Make sure we query the smaller population from the server
     if len(targets) <= len(sources):
         columns, index, relation, to_transpose = targets, sources, 'upstream', False
@@ -779,6 +800,7 @@ def get_adjacency(sources, targets=None, pos_filter=None, ignore_autapses=True,
 
     # Subset connectivity to source -> target
     cn = cn[cn.relation==relation].set_index('bodyid')
+    cn.index = cn.index.astype(str)
     cn = cn.reindex(index=index, columns=columns, fill_value=0)
 
     if to_transpose:
