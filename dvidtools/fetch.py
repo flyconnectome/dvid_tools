@@ -590,7 +590,7 @@ def get_n_synapses(bodyid, server=None, node=None):
     return {'pre': pre.get('PreSyn', None), 'post': post.get('PostSyn', None)}
 
 
-def get_synapses(bodyid, pos_filter=None, server=None, node=None):
+def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=None):
     """ Returns table of pre- and postsynapses associated with given body.
 
     Parameters
@@ -598,8 +598,11 @@ def get_synapses(bodyid, pos_filter=None, server=None, node=None):
     bodyid :        int | str
                     ID of body for which to get synapses.
     pos_filter :    function, optional
-                    Function to filter synapses by position. Must accept numpy
-                    array (N, 3) and return array of [True, False, ...]
+                    Function to filter synapses by position. Must accept
+                    numpy array (N, 3) and return array of [True, False, ...]
+    with_details :  bool, optional
+                    If True, will include more detailed information about 
+                    connector links.
     server :        str, optional
                     If not provided, will try reading from global.
     node :          str, optional
@@ -619,7 +622,7 @@ def get_synapses(bodyid, pos_filter=None, server=None, node=None):
 
     server, node, user = eval_param(server, node)
 
-    r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=false'.format(server, node, bodyid))
+    r = requests.get('{}/api/node/{}/synapses/label/{}?relationships={}'.format(server, node, bodyid, str(with_details).lower()))
 
     syn = r.json()
 
