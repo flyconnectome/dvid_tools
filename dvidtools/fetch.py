@@ -5,7 +5,6 @@ from . import decode
 from . import mesh
 from . import utils
 
-import functools
 import requests
 
 import numpy as np
@@ -22,7 +21,7 @@ def set_param(server=None, node=None, user=None):
 
 
 def eval_param(server=None, node=None, user=None):
-    """ Helper to read globally defined settings."""    
+    """ Helper to read globally defined settings."""
     parsed = {}
     for p, n in zip([server, node, user], ['server', 'node', 'user']):
         if isinstance(p, type(None)):
@@ -54,7 +53,7 @@ def get_skeleton(bodyid, save_to=None, server=None, node=None):
     """
 
     server, node, user = eval_param(server, node)
-    
+
     r = requests.get('{}/api/node/{}/segmentation_skeletons/key/{}_swc'.format(server, node, bodyid))
 
     #r.raise_for_status()
@@ -62,7 +61,7 @@ def get_skeleton(bodyid, save_to=None, server=None, node=None):
     if 'not found' in r.text:
         print(r.text)
         return None
-                 
+
     if save_to:
         with open(save_to, 'w') as f:
             f.write(r.text)
@@ -81,7 +80,7 @@ def get_user_bookmarks(server=None, node=None, user=None,
     node :              str, optional
                         If not provided, will try reading from global.
     user :              str, optional
-                        If not provided, will try reading from global.                
+                        If not provided, will try reading from global.
     return_dataframe :  bool, optional
                         If True, will return pandas.DataFrame. If False,
                         returns original json.
@@ -89,10 +88,10 @@ def get_user_bookmarks(server=None, node=None, user=None,
     Returns
     -------
     bookmarks : pandas.DataFrame or json
-                
+
     """
     server, node, user = eval_param(server, node, user)
-    
+
     r = requests.get('{}/api/node/{}/bookmark_annotations/tag/user:{}'.format(server, node, user))
 
     if return_dataframe:
@@ -133,19 +132,19 @@ def add_bookmarks(data, verify=True, server=None, node=None):
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
-                If not provided, will try reading from global.               
+                If not provided, will try reading from global.
 
     Returns
     -------
     Nothing
-                
+
     """
     server, node, user = eval_param(server, node)
 
     # Sanity check data
     if not isinstance(data, list):
         raise TypeError('Data must be list of dicts. '
-                        'See help(dvidtools.add_bookmarks)')    
+                        'See help(dvidtools.add_bookmarks)')
 
     if verify:
         required = {'Pos': list, 'Kind': str, 'Tags': [str],
@@ -154,7 +153,7 @@ def add_bookmarks(data, verify=True, server=None, node=None):
                          'user': str}}
 
         utils.verify_payload(data, required=required, required_only=True)
-    
+
     r = requests.post('{}/api/node/{}/bookmark_annotations/elements'.format(server, node),
                       json=data)
 
@@ -182,10 +181,10 @@ def get_annotation(bodyid, server=None, node=None, verbose=True):
     annotations :   dict
     """
     server, node, user = eval_param(server, node)
-    
+
     r = requests.get('{}/api/node/{}/segmentation_annotations/key/{}'.format(server, node, bodyid))
-    
-    try:    
+
+    try:
         return r.json()
     except:
         if verbose:
@@ -240,13 +239,13 @@ def edit_annotation(bodyid, annotation, server=None, node=None):
 
     # Compile new annotations
     new_an = {k: annotation.get(k, v) for k, v in old_an.items()}
-    
+
     r = requests.post('{}/api/node/{}/segmentation_annotations/key/{}'.format(server, node, bodyid),
                       json=new_an)
 
     # Check if it worked
     r.raise_for_status()
-    
+
     return None
 
 
@@ -260,16 +259,16 @@ def get_body_id(pos, server=None, node=None):
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
-                If not provided, will try reading from global.    
+                If not provided, will try reading from global.
 
     Returns
     -------
     body_id :   str
     """
     server, node, user = eval_param(server, node)
-    
+
     r = requests.get('{}/api/node/{}/segmentation/label/{}_{}_{}'.format(server, node, pos[0], pos[1], pos[2]))
-    
+
     return r.json()['Label']
 
 
@@ -283,7 +282,7 @@ def get_multiple_bodyids(pos, server=None, node=None):
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
-                If not provided, will try reading from global.    
+                If not provided, will try reading from global.
 
     Returns
     -------
@@ -293,7 +292,7 @@ def get_multiple_bodyids(pos, server=None, node=None):
 
     if isinstance(pos, np.ndarray):
         pos = pos.tolist()
-    
+
     bodies = requests.request('GET',
                               url="{}/api/node/{}/segmentation/labels".format(server, node),
                               json=pos).json()
@@ -311,14 +310,14 @@ def get_body_profile(bodyid, server=None, node=None):
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
-                If not provided, will try reading from global.    
+                If not provided, will try reading from global.
 
     Returns
     -------
     profile :   dict
     """
     server, node, user = eval_param(server, node)
-    
+
     r = requests.request('GET',
                               url="{}/api/node/{}/segmentation/sparsevol-size/{}".format(server, node, bodyid))
 
@@ -339,23 +338,23 @@ def get_todo_in_area(offset, size, server=None, node=None):
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
-                If not provided, will try reading from global.    
+                If not provided, will try reading from global.
 
     Returns
     -------
     todo tags : pandas.DataFrame
     """
     server, node, user = eval_param(server, node)
-    
+
     r = requests.get('{}/api/node/{}/segmentation_todo/elements/{}_{}_{}/{}_{}_{}'.format(server,
                                                                                           node,
                                                                                           size[0],
                                                                                           size[1],
-                                                                                          size[2],                                                                                        
+                                                                                          size[2],
                                                                                           offset[0],
                                                                                           offset[1],
                                                                                           offset[2]))
-    
+
     return pd.DataFrame.from_records(r.json())
 
 
@@ -367,19 +366,19 @@ def get_available_rois(server=None, node=None, step_size=2):
     server :        str, optional
                     If not provided, will try reading from global.
     node :          str, optional
-                    If not provided, will try reading from global.    
+                    If not provided, will try reading from global.
 
     Returns
     -------
     list
     """
-    
+
     server, node, user = eval_param(server, node)
-    
+
     r = requests.get('{}/api/node/{}/rois/keys'.format(server, node))
 
-    r.raise_for_status()    
-    
+    r.raise_for_status()
+
     return r.json()
 
 
@@ -412,22 +411,22 @@ def get_roi(roi, voxel_size=(32, 32, 32), server=None, node=None,
                     Coordinates are in nm.
     faces :         numpy.ndarray
     """
-    
+
     server, node, user = eval_param(server, node)
-    
+
     r = requests.get('{}/api/node/{}/{}/roi'.format(server, node, roi))
-    
+
     r.raise_for_status()
-    
+
     # The data returned are block coordinates: [x, y, z_start, z_end]
     blocks = r.json()
 
     if return_raw:
         return blocks
-    
+
     verts, faces = mesh.mesh_from_voxels(np.array(blocks), v_size=voxel_size,
                                          step_size=step_size)
-    
+
     return verts, faces
 
 
@@ -451,9 +450,9 @@ def get_roi2(roi, save_to=None, server=None, node=None):
     -------
     str
     """
-    
+
     server, node, user = eval_param(server, node)
-    
+
     # Get the key for this roi
     r = requests.get('{}/api/node/{}/rois/key/{}'.format(server, node, roi))
     r.raise_for_status()
@@ -467,7 +466,7 @@ def get_roi2(roi, save_to=None, server=None, node=None):
         with open(save_to, 'w') as f:
             f.write(r.text)
         return
-    
+
     # The data returned is in .obj format
     return r.text
 
@@ -498,7 +497,7 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, n
     -------
     verts :     np.array
                 Vertex coordinates in nm.
-    faces :     np.array                
+    faces :     np.array
     """
 
     server, node, user = eval_param(server, node)
@@ -511,19 +510,19 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, n
 
     if isinstance(scale, int) and scale > info['MaxDownresLevel']:
         raise ValueError('Scale greater than MaxDownresLevel')
-    
+
     if scale == 'coarse':
         r = requests.get('{}/api/node/{}/segmentation/sparsevol-coarse/{}'.format(server, node, bodyid))
     else:
         r = requests.get('{}/api/node/{}/segmentation/sparsevol/{}?scale={}'.format(server, node, bodyid, scale))
 
     b = r.content
-                     
+
     if save_to:
         with open(save_to, 'wb') as f:
             f.write(b)
         return
-    
+
     # Decode binary format
     header, coords = decode.decode_sparsevol(b, format='rles')
 
@@ -569,7 +568,7 @@ def get_n_synapses(bodyid, server=None, node=None):
 
     Returns
     -------
-    dict 
+    dict
                 ``{'PreSyn': int, 'PostSyn': int}
     """
 
@@ -601,7 +600,7 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
                     Function to filter synapses by position. Must accept
                     numpy array (N, 3) and return array of [True, False, ...]
     with_details :  bool, optional
-                    If True, will include more detailed information about 
+                    If True, will include more detailed information about
                     connector links.
     server :        str, optional
                     If not provided, will try reading from global.
@@ -610,7 +609,7 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
 
     Returns
     -------
-    pandas.DataFrame                 
+    pandas.DataFrame
     """
 
     if isinstance(bodyid, (list, np.ndarray)):
@@ -636,6 +635,82 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
         syn = np.array(syn)[filtered]
 
     return pd.DataFrame.from_records(syn)
+
+
+def get_connections(source, target, pos_filter=None, server=None, node=None):
+    """ Returns list of connections between source(s) and target(s).
+
+    Parameters
+    ----------
+    source :            int | str
+                        Body ID(s) of sources.
+    target :            int | str
+                        Body ID(s) of targets.
+    pos_filter :        function, optional
+                        Function to filter synapses by position. Must accept
+                        numpy array (N, 3) and return array of [True, False, ...]
+    server :            str, optional
+                        If not provided, will try reading from global.
+    node :              str, optional
+                        If not provided, will try reading from global.
+
+    Returns
+    -------
+    pandas.DataFrame
+                DataFrame containing "bodyid_pre", "tbar_position",
+                "tbar_confidence", "psd_position", "bodyid_post".
+    """
+
+    if not isinstance(source, (list, np.ndarray)):
+        source = [source]
+
+    if not isinstance(target, (list, np.ndarray)):
+        target = [target]
+
+    server, node, user = eval_param(server, node)
+
+    cn_data = []
+
+    for s in source:
+        r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=true'.format(server, node, bodyid))
+
+        # Raise
+        r.raise_for_status()
+
+        # Extract synapses
+        synapses = r.json()
+
+        # Collect downstream connections
+        cn_data += [[s,
+                     syn['Pos'],
+                     syn['Prop']['conf'],
+                     r['To']] for syn in synapses if syn['Kind'] == 'PreSyn' for r in syn['Rels']]
+
+    cn_data = pd.DataFrame(cn_data,
+                           columns=['bodyid_pre', 'tbar_position',
+                                    'tbar_confidence', 'psd_position'])
+
+    if pos_filter:
+        # Get filter
+        filtered = pos_filter(np.vstack(cn_data.tbar_position.values))
+
+        if not any(filtered):
+            raise ValueError('No synapses left after filtering.')
+
+        # Filter synapses
+        cn_data = cn_data.loc[filtered, :]
+
+    # Get positions of PSDs
+    pos = np.vstack(cn_data.psd_position.values)
+
+
+    # Get postsynaptic body IDs
+    bodies = requests.request('GET',
+                              url="{}/api/node/{}/segmentation/labels".format(server, node),
+                              json=pos).json()
+    cn_data['bodyid_post'] = bodies
+
+    return cn_data[cn_data.bodyid_post.isin(target)]
 
 
 def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
@@ -734,7 +809,7 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
     if connections['PostSynTo']:
         post = pd.DataFrame.from_dict(connections['PostSynTo'], orient='index')
         post.columns = ['n_synapses']
-        post['relation'] = 'upstream'        
+        post['relation'] = 'upstream'
     else:
         post = pd.DataFrame([], columns=['n_synapses', 'relation'])
         post.index = post.index.astype(np.int64)
@@ -746,7 +821,7 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
     cn_table.reset_index(drop=True, inplace=True)
 
     if ignore_autapses:
-        to_drop = cn_table.index[cn_table.bodyid==int(bodyid)]        
+        to_drop = cn_table.index[cn_table.bodyid==int(bodyid)]
         cn_table = cn_table.drop(index=to_drop).reset_index()
 
     return cn_table[['bodyid', 'relation', 'n_synapses']]
@@ -788,7 +863,7 @@ def get_adjacency(sources, targets=None, pos_filter=None, ignore_autapses=True,
 
     # Make sure we don't have any duplicates
     sources = np.array(list(set(sources))).astype(str)
-    targets = np.array(list(set(targets))).astype(str)    
+    targets = np.array(list(set(targets))).astype(str)
 
     # Make sure we query the smaller population from the server
     if len(targets) <= len(sources):
