@@ -707,7 +707,7 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
     # Get postsynaptic body IDs
     bodies = requests.request('GET',
                               url="{}/api/node/{}/segmentation/labels".format(server, node),
-                              json=pos).json()
+                              json=pos.tolist()).json()
     cn_data['bodyid_post'] = bodies
 
     return cn_data[cn_data.bodyid_post.isin(target)]
