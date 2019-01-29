@@ -672,7 +672,7 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
     cn_data = []
 
     for s in source:
-        r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=true'.format(server, node, bodyid))
+        r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=true'.format(server, node, s))
 
         # Raise
         r.raise_for_status()
