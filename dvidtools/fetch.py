@@ -5,11 +5,14 @@ from . import decode
 from . import mesh
 from . import utils
 
+import inspect
+import os
 import requests
 
 import numpy as np
 import pandas as pd
 
+from io import StringIO
 from tqdm import tqdm
 
 
@@ -32,15 +35,20 @@ def eval_param(server=None, node=None, user=None):
     return [parsed[n] for n in ['server', 'node', 'user']]
 
 
-def get_skeleton(bodyid, save_to=None, server=None, node=None):
+def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None):
     """ Download skeleton as SWC file.
 
     Parameters
     ----------
     bodyid :    int | str
-                ID of body for which to download skeleton.
+                ID(s) of body for which to download skeleton.
     save_to :   str | None, optional
-                If provided, will save SWC to file.
+                If provided, will save SWC to file. If str must be file or
+                path.
+    xform :     function, optional
+                If provided will run this function to transform coordinates
+                before saving/returning the SWC file. Function must accept
+                ``(N, 3)`` numpy array.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -50,7 +58,43 @@ def get_skeleton(bodyid, save_to=None, server=None, node=None):
     -------
     SWC :       str
                 Only if ``save_to=None``.
+
+    Examples
+    --------
+    Easy: grab a neuron and save it to a file
+
+    >>> dt.get_skeleton(485775679, save_to='~/Downloads/')
+
+    Grab a neuron and transform to FAFB space before saving to
+    file. This requires `navis <https://navis.readthedocs.io>`_
+    and ``rpy2`` to be installed.
+
+    >>> from navis.interfaces
+    >>> from rpy2.robjects.packages import importr
+    >>> importr('nat.jrcfibf')
+    >>> dvidtools.get_skeleton(485775679,
+    ...                        save_to='~/Downloads/',
+    ...                        xform=lambda x: r.xform_brain(x,
+    ...                                                      source='JRCFIB2018Fraw',
+    ...                                                      target='FAFB14')
+    ...                       )
+
+
     """
+
+    if isinstance(bodyid, (list, np.ndarray)):
+        if save_to and not os.path.isdir(save_to):
+            raise ValueError('"save_to" must be path when loading multiple'
+                             'multiple bodies')
+        resp = {x: get_skeleton(x,
+                                save_to=save_to,
+                                server=server,
+                                node=node) for x in tqdm(bodyid,
+                                                         desc='Loading')}
+        if not save_to:
+            return resp
+        else:
+            return
 
     server, node, user = eval_param(server, node)
 
@@ -62,11 +106,42 @@ def get_skeleton(bodyid, save_to=None, server=None, node=None):
         print(r.text)
         return None
 
-    if save_to:
-        with open(save_to, 'w') as f:
-            f.write(r.text)
+    if callable(xform):
+        # Keep track of header
+        header = [l for l in r.text.split('\n') if l.startswith('#')]
+
+        # Add xform function to header for documentation
+        header.append('#x/y/z coordinates transformed by dvidtools using this:')
+        header += ['#' + l for l in inspect.getsource(xform).split('\n')]
+
+        # Turn header back into string
+        header = '\n'.join(header)
+
+        # Turn SWC into a DataFrame
+        f = StringIO(r.text)
+        df = pd.read_csv(f, delim_whitespace=True, header=None, comment='#')
+
+        # Transform coordinates
+        df.iloc[:, 2:5] = xform(df.iloc[:, 2:5].values)
+
+        # Turn DataFrame back into string
+        s = StringIO()
+        df.to_csv(s, sep=' ', header=False)
+
+        # Replace text
+        swc = header + s.getvalue()
+    elif not isinstance(xform, type(None)):
+        raise TypeError('"xform" must be a function, not "{}"'.format(type(x)))
     else:
-        return r.text
+        swc = r.text
+
+    if save_to:
+        if os.path.isdir(save_to):
+            save_to = os.path.join(save_to, '{}.swc'.format(bodyid))
+        with open(save_to, 'w') as f:
+            f.write(swc)
+    else:
+        return swc
 
 
 def get_user_bookmarks(server=None, node=None, user=None,
