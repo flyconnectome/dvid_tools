@@ -4,6 +4,7 @@
 import numpy as np
 
 from skimage.measure import marching_cubes_lewiner
+from scipy.ndimage.morphology import binary_erosion
 
 def mesh_from_voxels(voxels, v_size, step_size=1):
     """ Turns voxels into vertices and faces using marching cubes.
@@ -26,10 +27,10 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
     # Necessary for marching cube producing watertight meshes.
     # Will compensate for this further down
     voxels += 1
-    
-    # Generate empty array    
+
+    # Generate empty array
     mat = np.zeros((voxels.max(axis=0) + 2)[[0, 1, -1]], dtype=np.float32)
-    
+
     #Populate matrix
     if voxels.shape[1] == 4:
         for col in voxels:
@@ -38,13 +39,13 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
         mat[voxels[:, 0], voxels[:, 1], voxels[:, 2]] = 1
     else:
         raise ValueError('Unexpected shape')
-    
+
     # Use marching cubes to create surface model
     verts, faces, normals, values = marching_cubes_lewiner(mat,
                                                            level=.5,
                                                            step_size=step_size,
                                                            allow_degenerate=False,
-                                                           gradient_direction='ascent',                                                           
+                                                           gradient_direction='ascent',
                                                            spacing=v_size)
 
     # Compensate for earlier block offset
@@ -54,3 +55,35 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
     verts = verts[:, [2, 1, 0]]
 
     return verts, faces
+
+
+def remove_surface_voxels(voxels, **kwargs):
+    """Removes surface voxels. """
+
+    # Use bounding boxes to keep matrix small
+    bb_min = voxels.min(axis=0)
+    bb_max = voxels.max(axis=0)
+    dim = (bb_max - bb_min) + 1
+
+    # Voxel offset
+    voxel_off = voxels - bb_min
+
+    # Generate empty array
+    mat = np.zeros(dim + 1, dtype=np.float32)
+
+    #Populate matrix
+    if voxels.shape[1] == 3:
+        mat[voxel_off[:, 0], voxel_off[:, 1], voxel_off[:, 2]] = 1
+    else:
+        raise ValueError('Unexpected shape')
+
+    # Erode
+    mat_erode = binary_erosion(mat, **kwargs).astype(mat.dtype)
+
+    # Turn back into voxels
+    voxels_erode = np.vstack(np.where(mat_erode == 1)).T + bb_min
+
+    return voxels_erode
+
+
+
