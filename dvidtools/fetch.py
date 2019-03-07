@@ -374,6 +374,72 @@ def get_multiple_bodyids(pos, server=None, node=None):
     return bodies
 
 
+def get_body_position(bodyid, server=None, node=None):
+    """ Get a single position for given body ID.
+
+    This will (like neutu) use the skeleton. If body has no skeleton, will
+    use mesh as fallback.
+
+    Parameters
+    ----------
+    bodyid :    body ID
+                Body for which to find a position.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    (x, y, z)
+    """
+
+    bodyid = utils.parse_bid(bodyid)
+
+    s = get_skeleton(bodyid, server=server, node=node, verbose=False)
+
+    if s:
+        s, header = utils.parse_swc_str(s)
+        return s.loc[0, ['x', 'y', 'z']].values
+    else:
+        # First get voxels of the coarse neuron
+        voxels = get_neuron(bodyid, scale='coarse', ret_type='INDEX',
+                            server=server, node=node)
+
+        # Erode surface voxels to make sure we get a central position
+        while True:
+            eroded = mesh.remove_surface_voxels(voxels)
+
+            # Stop before no more voxels left
+            if eroded.size == 0:
+                break
+
+            voxels = eroded
+
+        # Now query the more precise mesh for this coarse voxel
+        # Pick a random voxel
+        v = voxels[0] * 64
+        # Generate a bounding bbox
+        bbox = np.vstack([v,v]).T
+        bbox[:, 1] += 63
+
+        voxels = get_neuron(bodyid, scale=0, ret_type='INDEX',
+                            bbox=bbox.ravel(),
+                            server=server, node=node)
+
+        # Erode surface voxels again to make sure we get a central position
+        while True:
+            eroded = mesh.remove_surface_voxels(voxels)
+
+            # Stop before no more voxels left
+            if eroded.size == 0:
+                break
+
+            voxels = eroded
+
+        return voxels[0]
+
+
 def get_body_profile(bodyid, server=None, node=None):
     """ Get body profile (n voxels, n blocks, bounding box)
 
