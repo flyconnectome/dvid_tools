@@ -16,12 +16,13 @@ pip3 install git+git://github.com/flyconnectome/dvid_tools@master
 - pandas
 - scikit-image
 - tqdm
+- scipy
 
 ## Examples
 
 Setting up
 ```Python
-import dvidtools as dt 
+import dvidtools as dt
 
 # You can pass these parameters explicitly to each function
 # but defining them globally is more convenient
