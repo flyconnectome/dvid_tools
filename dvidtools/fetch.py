@@ -695,6 +695,14 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
     Returns
     -------
     pandas.DataFrame
+
+    Examples
+    --------
+    Get synapses only in the LH (requires navis)
+    >>> import navis
+    >>> lh = navis.Volume(*dvidtools.get_roi('LH'))
+    >>> lh_syn = dvidtools.get_synapses(329566174,
+    ...                                 pos_filter=lambda x: navis.in_volume(x, lh))
     """
 
     if isinstance(bodyid, (list, np.ndarray)):
