@@ -14,10 +14,21 @@
 #
 import os
 import sys
+sys.path.insert(0, os.path.abspath('.'))
 sys.path.insert(0, os.path.abspath('..'))
 
 import numpydoc
 import sphinx_bootstrap_theme
+
+import mock
+MOCK_MODULES = ['numpy', 'pandas',
+                'tqdm', 'tqdm.tqdm',
+                'skimage.measure.marching_cubes_lewiner',
+                'scipy.ndimage.morphology.binary_erosion',
+                'scipy.spatial.distance.cdist']
+
+for mod_name in MOCK_MODULES:
+    sys.modules[mod_name] = mock.Mock()
 
 # -- Project information -----------------------------------------------------
 
