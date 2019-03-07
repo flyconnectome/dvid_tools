@@ -32,7 +32,7 @@ Setting up
 
     # You can pass these parameters explicitly to each function
     # but defining them globally is more convenient
-    server = 'http://emdata3.int.janelia.org:8900'
+    server = '127.0.0.1:8000'
     node = '54f7'
     user = 'schlegelp'
 

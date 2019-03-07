@@ -1,7 +1,9 @@
+[![Documentation Status](https://readthedocs.org/projects/dvidtools/badge/?version=latest)](http://dvidtools.readthedocs.io/en/latest/?badge=latest)
+
 # dvidtools
 Python tools to fetch data from [DVID](https://github.com/janelia-flyem/dvid) servers.
 
-Find the documentation [here](https://dvidtools.readthedocs.io/en/latest/)
+Find the documentation [here](https://.readthedocs.io)
 
 ## Install
 
@@ -28,7 +30,7 @@ import dvidtools as dt
 
 # You can pass these parameters explicitly to each function
 # but defining them globally is more convenient
-server = 'http://emdata3.int.janelia.org:8900'
+server = '127.0.0.1:8000'
 node = '54f7'
 user = 'schlegelp'
 
