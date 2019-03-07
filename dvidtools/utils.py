@@ -41,7 +41,36 @@ def verify_payload(data, required, required_only=True):
                             raise TypeError('"{}" must not contain "{}"'.format(e, type(l)))
 
 
-            def parse_bid(x):
+def parse_swc_str(x):
+    """ Parse SWC string into a pandas DataFrame.
+
+    Parameters
+    ----------
+    x :     str
+
+    Returns
+    -------
+    pandas.DataFrame, header
+
+    """
+
+    if not isinstance(x, str):
+        raise TypeError('x must be str, got "{}"'.format(type(x)))
+
+    # Extract header
+    header = [l for l in x.split('\n') if l.startswith('#')]
+
+    # Turn header back into string
+    header = '\n'.join(header)
+
+    # Turn SWC into a DataFrame
+    f = StringIO(x)
+    df = pd.read_csv(f, delim_whitespace=True, header=None, comment='#')
+
+    df.columns = ['node_id', 'label', 'x', 'y', 'z', 'radius', 'parent_id']
+
+    return df, header
+
     try:
         return int(x)
     except:
