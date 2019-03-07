@@ -5,3 +5,5 @@ __version__ = (0, 1, 0)
 __verstr__ = "0.1.0"
 
 from .fetch import *
+from .tip import *
+from .utils import *
