@@ -410,6 +410,9 @@ def get_body_profile(bodyid, server=None, node=None):
 def get_todo_in_area(offset, size, server=None, node=None):
     """ Get TODO tags in given 3D area.
 
+def get_labels_in_area(offset, size, server=None, node=None):
+    """ Get labels (todo, to split, etc.) in given bounding box.
+
     Parameters
     ----------
     offset :    iterable
@@ -427,16 +430,24 @@ def get_todo_in_area(offset, size, server=None, node=None):
     """
     server, node, user = eval_param(server, node)
 
-    r = requests.get('{}/api/node/{}/segmentation_todo/elements/{}_{}_{}/{}_{}_{}'.format(server,
-                                                                                          node,
-                                                                                          size[0],
-                                                                                          size[1],
-                                                                                          size[2],
-                                                                                          offset[0],
-                                                                                          offset[1],
-                                                                                          offset[2]))
+    r = requests.get('{}/api/node/{}/segmentation_todo/elements/'
+                     '{}_{}_{}/{}_{}_{}'.format(server,
+                                                node,
+                                                int(size[0]),
+                                                int(size[1]),
+                                                int(size[2]),
+                                                int(offset[0]),
+                                                int(offset[1]),
+                                                int(offset[2])))
 
-    return pd.DataFrame.from_records(r.json())
+    r.raise_for_status()
+
+    j = r.json()
+
+    if j:
+        return pd.DataFrame.from_records(r.json())
+    else:
+        return None
 
 
 def get_available_rois(server=None, node=None, step_size=2):
