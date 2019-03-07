@@ -407,8 +407,38 @@ def get_body_profile(bodyid, server=None, node=None):
     return r.json()
 
 
-def get_todo_in_area(offset, size, server=None, node=None):
-    """ Get TODO tags in given 3D area.
+def get_label_at_position(pos, server=None, node=None):
+    """ Returns label at given position.
+
+    Checking/unchecking assigments apparently leaves invisible bookmarks at
+    the given position. These can be queried using this endpoint.
+
+    Parameters
+    ----------
+    pos :       tuple
+                X/Y/Z Coordinates to query.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    dict
+                E.g. ``{'checked': True}``
+
+    """
+
+    server, node, user = eval_param(server, node)
+
+    r = requests.get('{}/api/node/{}/bookmarks/key/{}_{}_{}'.format(server,
+                                                                    node,
+                                                                    int(pos[0]),
+                                                                    int(pos[1]),
+                                                                    int(pos[2])))
+
+    return r.json() if r.text and 'not found' not in r.text else {}
+
 
 def get_labels_in_area(offset, size, server=None, node=None):
     """ Get labels (todo, to split, etc.) in given bounding box.
