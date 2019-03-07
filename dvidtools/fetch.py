@@ -779,7 +779,7 @@ def get_n_synapses(bodyid, server=None, node=None):
     Returns
     -------
     dict
-                ``{'PreSyn': int, 'PostSyn': int}
+                ``{'PreSyn': int, 'PostSyn': int}``
     """
 
     server, node, user = eval_param(server, node)
