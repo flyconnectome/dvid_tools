@@ -1,6 +1,8 @@
 # dvidtools
 Python tools to fetch data from [DVID](https://github.com/janelia-flyem/dvid) servers.
 
+Find the documentation [here](https://dvidtools.readthedocs.io/en/latest/)
+
 ## Install
 
 Make sure you have [Python 3](https://www.python.org),
