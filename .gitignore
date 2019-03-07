@@ -6,6 +6,8 @@ __pycache__/
 # C extensions
 *.so
 
+.DS_Store
+
 # Distribution / packaging
 .Python
 build/
@@ -65,6 +67,7 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/src/_autosummary
 
 # PyBuilder
 target/
