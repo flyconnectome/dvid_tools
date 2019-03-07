@@ -94,7 +94,7 @@ def detect_tips(x, psd_dist=10, done_dist=50, test_checked=True,
                                               [done_dist] * 3,
                                               server=server, node=node)
 
-            if not labels:
+            if isinstance(labels, type(None)):
                 at_done.append(False)
                 continue
 
