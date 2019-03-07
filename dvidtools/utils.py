@@ -41,4 +41,9 @@ def verify_payload(data, required, required_only=True):
                             raise TypeError('"{}" must not contain "{}"'.format(e, type(l)))
 
 
-            
+            def parse_bid(x):
+    try:
+        return int(x)
+    except:
+        raise ValueError('Unable to coerce "{}" into numeric body ID'.format(x))
+

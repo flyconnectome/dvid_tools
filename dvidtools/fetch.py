@@ -96,6 +96,8 @@ def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None):
         else:
             return
 
+    bodyid = utils.parse_bid(bodyid)
+
     server, node, user = eval_param(server, node)
 
     r = requests.get('{}/api/node/{}/segmentation_skeletons/key/{}_swc'.format(server, node, bodyid))
@@ -309,6 +311,8 @@ def edit_annotation(bodyid, annotation, server=None, node=None):
     """
     server, node, user = eval_param(server, node)
 
+    bodyid = utils.parse_bid(bodyid)
+
     # Get existing annotations
     old_an = get_annotation(bodyid, server=server, node=node)
 
@@ -392,6 +396,8 @@ def get_body_profile(bodyid, server=None, node=None):
     profile :   dict
     """
     server, node, user = eval_param(server, node)
+
+    bodyid = utils.parse_bid(bodyid)
 
     r = requests.request('GET',
                               url="{}/api/node/{}/segmentation/sparsevol-size/{}".format(server, node, bodyid))
@@ -577,6 +583,8 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, n
 
     server, node, user = eval_param(server, node)
 
+    bodyid = utils.parse_bid(bodyid)
+
     # Get voxel sizes based on scale
     info = get_segmentation_info(server, node)['Extended']
 
@@ -649,6 +657,8 @@ def get_n_synapses(bodyid, server=None, node=None):
 
     server, node, user = eval_param(server, node)
 
+    bodyid = utils.parse_bid(bodyid)
+
     if isinstance(bodyid, (list, np.ndarray)):
         syn = {b: get_n_synapses(b, server, node) for b in bodyid}
         return pd.DataFrame.from_records(syn).T
@@ -695,6 +705,8 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
         return pd.concat(tables, axis=0)
 
     server, node, user = eval_param(server, node)
+
+    bodyid = utils.parse_bid(bodyid)
 
     r = requests.get('{}/api/node/{}/synapses/label/{}?relationships={}'.format(server, node, bodyid, str(with_details).lower()))
 
@@ -835,6 +847,8 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
         return cn.sort_values(['relation', 'total'], ascending=False).reset_index(drop=True)
 
     server, node, user = eval_param(server, node)
+
+    bodyid = utils.parse_bid(bodyid)
 
     # Get synapses
     r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=true'.format(server, node, bodyid))
