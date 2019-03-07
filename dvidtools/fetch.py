@@ -35,7 +35,8 @@ def eval_param(server=None, node=None, user=None):
     return [parsed[n] for n in ['server', 'node', 'user']]
 
 
-def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None):
+def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None,
+                 verbose=True):
     """ Download skeleton as SWC file.
 
     Parameters
@@ -105,23 +106,17 @@ def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None):
     #r.raise_for_status()
 
     if 'not found' in r.text:
-        print(r.text)
+        if verbose:
+            print(r.text)
         return None
 
     if callable(xform):
-        # Keep track of header
-        header = [l for l in r.text.split('\n') if l.startswith('#')]
+        # Parse SWC string
+        df, header = utils.parse_swc_str(r.text)
 
         # Add xform function to header for documentation
-        header.append('#x/y/z coordinates transformed by dvidtools using this:')
-        header += ['#' + l for l in inspect.getsource(xform).split('\n')]
-
-        # Turn header back into string
-        header = '\n'.join(header)
-
-        # Turn SWC into a DataFrame
-        f = StringIO(r.text)
-        df = pd.read_csv(f, delim_whitespace=True, header=None, comment='#')
+        header += '#x/y/z coordinates transformed by dvidtools using this:\n'
+        header += '\n'.join(['#' + l for l in inspect.getsource(xform).split('\n')])
 
         # Transform coordinates
         df.iloc[:, 2:5] = xform(df.iloc[:, 2:5].values)
