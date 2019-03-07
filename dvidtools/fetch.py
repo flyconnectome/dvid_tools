@@ -552,7 +552,8 @@ def get_roi2(roi, save_to=None, server=None, node=None):
     return r.text
 
 
-def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, node=None):
+def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
+               ret_type='MESH', bbox=None, server=None, node=None):
     """ Get neuron as mesh.
 
     Parameters
@@ -569,6 +570,12 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, n
     save_to :   str | None, optional
                 If provided, will not convert to verts and faces but instead
                 save as response from server as binary file.
+    ret_type :  "MESH" | "COORDS" | "INDEX", optional
+                If "MESH" will return vertices and faces. If "COORDS" will
+                return voxel coordinates. "INDEX" returns voxel indices.
+    bbox :      list | None, optional
+                Bounding box to which to restrict the query to.
+                Format: ``[x_min, x_max, y_min, y_max, z_min, z_max]``.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -580,6 +587,9 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, n
                 Vertex coordinates in nm.
     faces :     np.array
     """
+
+    if ret_type.lower() not in ['mesh', 'coords', 'index']:
+        raise ValueError('"ret_type" must be "MESH", "COORDS" or "INDEX"')
 
     server, node, user = eval_param(server, node)
 
@@ -594,10 +604,22 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, n
     if isinstance(scale, int) and scale > info['MaxDownresLevel']:
         raise ValueError('Scale greater than MaxDownresLevel')
 
-    if scale == 'coarse':
-        r = requests.get('{}/api/node/{}/segmentation/sparsevol-coarse/{}'.format(server, node, bodyid))
+
+    if not isinstance(bbox, type(None)):
+        url = '{}/api/node/{}/segmentation/sparsevol/{}'.format(server, node, bodyid)
+        url += '?minx={}&maxx={}&miny={}&maxy={}&minz={}&maxz={}'.format(int(bbox[0]),
+                                                                         int(bbox[1]),
+                                                                         int(bbox[2]),
+                                                                         int(bbox[3]),
+                                                                         int(bbox[4]),
+                                                                         int(bbox[5]))
+    elif scale == 'coarse':
+        url = '{}/api/node/{}/segmentation/sparsevol-coarse/{}'.format(server, node, bodyid)
     else:
-        r = requests.get('{}/api/node/{}/segmentation/sparsevol/{}?scale={}'.format(server, node, bodyid, scale))
+        url = '{}/api/node/{}/segmentation/sparsevol/{}?scale={}'.format(server, node, bodyid, scale)
+
+    r = requests.get(url)
+    r.raise_for_status()
 
     b = r.content
 
@@ -607,11 +629,14 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None, server=None, n
         return
 
     # Decode binary format
-    header, coords = decode.decode_sparsevol(b, format='rles')
+    header, voxels = decode.decode_sparsevol(b, format='rles')
 
-    return coords
+    if ret_type.lower() == 'index':
+        return voxels
+    elif ret_type.lower == 'coords':
+        return voxels * vsize[scale]
 
-    verts, faces = mesh.mesh_from_voxels(coords,
+    verts, faces = mesh.mesh_from_voxels(voxels,
                                          v_size=vsize[scale],
                                          step_size=step_size)
 
