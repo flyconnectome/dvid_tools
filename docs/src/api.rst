@@ -15,13 +15,13 @@ Reading/Writing Data
     edit_annotation
     get_adjacency
     get_annotation
+    get_assignment_status
     get_available_rois
     get_body_id
     get_body_position
     get_body_profile
     get_connections
     get_connectivity
-    get_label_at_position
     get_labels_in_area
     get_multiple_bodyids
     get_n_synapses

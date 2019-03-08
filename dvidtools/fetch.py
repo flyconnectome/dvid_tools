@@ -468,16 +468,19 @@ def get_body_profile(bodyid, server=None, node=None):
     return r.json()
 
 
-def get_label_at_position(pos, server=None, node=None):
-    """ Returns label at given position.
+def get_assignment_status(pos, window=None, server=None, node=None):
+    """ Returns assignment status at given position.
 
-    Checking/unchecking assigments apparently leaves invisible bookmarks at
-    the given position. These can be queried using this endpoint.
+    Checking/unchecking assigments leaves invisible "bookmarks" at the given
+    position. These can be queried using this endpoint.
 
     Parameters
     ----------
     pos :       tuple
                 X/Y/Z Coordinates to query.
+    window :    array-like | None, optional
+                If provided, will return assigments in bounding box with
+                ``pos`` in the center and ``window`` as size in x/y/z.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -486,11 +489,44 @@ def get_label_at_position(pos, server=None, node=None):
     Returns
     -------
     dict
-                E.g. ``{'checked': True}``
+                E.g. ``{'checked': True}`` if assignment(s) were found at
+                given position/in given bounting box.
+    None
+                If no assigments found.
+    list
+                If ``window!=None`` will return a list of of dicts.
 
     """
 
     server, node, user = eval_param(server, node)
+
+    if isinstance(window, (list, np.ndarray, tuple)):
+        pos = pos if isinstance(pos, np.ndarray) else np.array(pos)
+        window = window if isinstance(window, np.ndarray) else np.array(window)
+
+        r = requests.get('{}/api/node/{}/bookmarks/keyrange/'
+                         '{}_{}_{}/{}_{}_{}'.format(server,
+                                                    node,
+                                                    int(pos[0]-window[0]/2),
+                                                    int(pos[1]-window[1]/2),
+                                                    int(pos[2]-window[2]/2),
+                                                    int(pos[0]+window[0]/2),
+                                                    int(pos[1]+window[1]/2),
+                                                    int(pos[2]+window[2]/2),))
+        r.raise_for_status()
+
+        # Above query returns coordinates that are in lexicographically
+        # between key1 and key2 -> we have to filter for those inside the
+        # bounding box ourselves
+        coords = np.array([c.split('_') for c in r.json()]).astype(int)
+
+        coords = coords[(coords > (pos - window / 2)).all(axis=1)]
+        coords = coords[(coords < (pos + window / 2)).all(axis=1)]
+
+        return [get_assignment_status(c,
+                                      window=None,
+                                      server=server,
+                                      node=node) for c in coords]
 
     r = requests.get('{}/api/node/{}/bookmarks/key/{}_{}_{}'.format(server,
                                                                     node,
@@ -498,7 +534,10 @@ def get_label_at_position(pos, server=None, node=None):
                                                                     int(pos[1]),
                                                                     int(pos[2])))
 
-    return r.json() if r.text and 'not found' not in r.text else {}
+    # Will raise if key not found -> so just don't
+    # r.raise_for_status()
+
+    return r.json() if r.text and 'not found' not in r.text else None
 
 
 def get_labels_in_area(offset, size, server=None, node=None):
