@@ -137,7 +137,7 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
                 'url': 'https://github.com/flyconnectome/dvid_tools',
                 'parameters' : {'psd_dist': psd_dist,
                                 'done_dost': done_dist,
-                                'test_checked': test_checked}}
+                                'checked_dist': checked_dist}}
         _ = utils.gen_assignments(leafs, save_to=save_to, meta=meta)
     else:
         return leafs.reset_index(drop=True)
