@@ -490,7 +490,7 @@ def get_assignment_status(pos, window=None, server=None, node=None):
     -------
     dict
                 E.g. ``{'checked': True}`` if assignment(s) were found at
-                given position/in given bounting box.
+                given position/in given bounding box.
     None
                 If no assigments found.
     list
@@ -519,6 +519,9 @@ def get_assignment_status(pos, window=None, server=None, node=None):
         # between key1 and key2 -> we have to filter for those inside the
         # bounding box ourselves
         coords = np.array([c.split('_') for c in r.json()]).astype(int)
+
+        if coords.size == 0:
+            return []
 
         coords = coords[(coords > (pos - window / 2)).all(axis=1)]
         coords = coords[(coords < (pos + window / 2)).all(axis=1)]
