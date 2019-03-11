@@ -13,7 +13,8 @@ from tqdm import tqdm
 
 
 def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
-                pos_filter=None, save_to=None, server=None, node=None):
+                pos_filter=None, save_to=None, verbose=True,
+                server=None, node=None):
     """ Detects potential open ends on a given neuron.
 
     In brief, this script gets the skeleton's leaf nodes and checks if they
@@ -68,6 +69,8 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
 
         leafs = leafs.loc[filtered, :]
 
+    n_leafs = leafs.shape[0]
+
     if psd_dist:
         # Get synapses
         syn = fetch.get_synapses(x, pos_filter=None, with_details=False,
@@ -83,11 +86,13 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
 
         leafs = leafs[~at_psd]
 
+    psd_filtered = n_leafs - leafs.shape[0]
+
     if done_dist:
         # Check for DONE tags in vicinity
         at_done = []
         for pos in tqdm(leafs[['x', 'y', 'z']].values,
-                        desc='Check DONE'):
+                        desc='Check DONE', leave=False):
             # We are cheating here b/c we don't actually calculate the
             # distance!
             labels = fetch.get_labels_in_area(pos - done_dist/2,
@@ -106,11 +111,13 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
 
         leafs = leafs[~np.array(at_done, dtype=bool)]
 
+    done_filtered = n_leafs - leafs.shape[0]
+
     if checked_dist:
         # Check if position has been "Set Checked" in the past
         checked = []
         for pos in tqdm(leafs[['x', 'y', 'z']].values,
-                        desc='Test Checked'):
+                        desc='Test Checked', leave=False):
             # We will look for the assigment in a small window in case the
             # tip has moved slightly between iterations
             ass = fetch.get_assignment_status(pos, window=[checked_dist]*3,
@@ -123,11 +130,22 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
 
         leafs = leafs[~np.array(checked, dtype=bool)]
 
+    checked_filtered = n_leafs - leafs.shape[0]
+
     # Make a copy before we wrap up to prevent any data-on-copy warning
     leafs = leafs.copy()
 
     # Assuming larger radii indicate more likely continuations
     leafs.sort_values('radius', ascending=False, inplace=True)
+
+    if verbose:
+        d = {'open ends': leafs.shape[0],
+             'total ends': n_leafs,
+             'at PSD': psd_filtered,
+             'at Done tag': done_filtered,
+             'at checked assignment': checked_filtered,
+            }
+        print(pd.DataFrame.from_dict(d, orient='index', columns=[x]))
 
     if save_to:
         leafs['body ID'] = x
