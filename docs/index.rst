@@ -12,15 +12,21 @@ Make sure you have `Python 3 <https://www.python.org>`_,
 
 ::
 
-    pip3 install git+git://github.com/flyconnectome/dvid_tools@master
+    pip install git+git://github.com/flyconnectome/dvid_tools@master
 
-Dependencies
-------------
-- numpy
-- pandas
-- scikit-image
-- tqdm
-- scipy
+
+What can ``dvidtools`` do for you?
+--------------------------------
+
+- get/set user bookmarks
+- get/set neuron annotations (names)
+- download meshes, skeletons (SWCs) and ROIs
+- get basic neuron info (# of voxels/synapses)
+- get synapses
+- get connectivity (adjacency matrix, connectivity table)
+- retrieve labels (TODO, to split, etc)
+- map positions to body IDs
+- detect potential open ends (based on a script by `Stephen Plaza <https://github.com/stephenplaza>`_)
 
 Examples
 --------
@@ -80,3 +86,10 @@ Get connectivity in given ROI using `pymaid <https://pymaid.readthedocs.io>`_
 
     # Fetch connectivity but use filter function
     lh_partners = dt.get_connectivity(body_id, pos_filter=lambda x: pymaid.in_volume(x, lh))
+
+
+Detect potential open ends and write them to ``.json`` file that can be imported into `neutu <https://github.com/janelia-flyem/NeuTu>`_.
+::
+
+    body_id = '1700937093'
+    tips = dt.detect_tips(body_id, save_to='~/Documents/{}.json'.format(body_id))
