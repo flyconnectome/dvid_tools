@@ -484,6 +484,9 @@ def get_assignment_status(pos, window=None, server=None, node=None):
     window :    array-like | None, optional
                 If provided, will return assigments in bounding box with
                 ``pos`` in the center and ``window`` as size in x/y/z.
+    bodyid :    int | list, optional
+                If provided, will only return assignments that are within the
+                given body ID(s). Only relevant if ``window!=None``.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -505,6 +508,7 @@ def get_assignment_status(pos, window=None, server=None, node=None):
 
     if isinstance(window, (list, np.ndarray, tuple)):
         pos = pos if isinstance(pos, np.ndarray) else np.array(pos)
+        pos = pos.astype(int)
         window = window if isinstance(window, np.ndarray) else np.array(window)
 
         r = requests.get('{}/api/node/{}/bookmarks/keyrange/'
@@ -523,6 +527,19 @@ def get_assignment_status(pos, window=None, server=None, node=None):
         # bounding box ourselves
         coords = np.array([c.split('_') for c in r.json()]).astype(int)
 
+        # If provided, make sure all coordinates in window are from given
+        # body ID(s)
+        if not isinstance(bodyid, type(None)):
+            if not isinstance(bodyid, (list, np.ndarray)):
+                bodyid = [bodyid]
+
+            bids = np.array(get_multiple_bodyids(coords,
+                                                 server=server,
+                                                 node=node
+                                                 ))
+
+            coords = coords[np.in1d(bids, bodyid)]
+
         if coords.size == 0:
             return []
 
@@ -531,6 +548,7 @@ def get_assignment_status(pos, window=None, server=None, node=None):
 
         return [get_assignment_status(c,
                                       window=None,
+                                      bodyid=bodyid,
                                       server=server,
                                       node=node) for c in coords]
 
