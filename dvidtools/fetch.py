@@ -1202,12 +1202,19 @@ def snap_to_body(bodyid, positions, server=None, node=None):
     elif not isinstance(positions, np.ndarray):
         positions = np.array(positions)
 
+    positions = positions.astype(int)
+
+    # Find those that are not already within the body
+    bids = get_multiple_bodyids(positions, server=server, node=node)
+    mask = np.array(bids) != int(bodyid)
+    to_snap = positions[mask]
+
     # First get voxels of the coarse neuron
     voxels = get_neuron(bodyid, scale='coarse', ret_type='INDEX',
                         server=server, node=node) * 64
 
     # For each position find a corresponding coarse voxel
-    dist = cdist(positions, voxels)
+    dist = cdist(to_snap, voxels)
     closest = voxels[np.argmin(dist, axis=1)]
 
     # Now query the more precise mesh for these coarse voxels
@@ -1225,4 +1232,6 @@ def snap_to_body(bodyid, positions, server=None, node=None):
 
         snapped.append(fine[np.argmin(dist, axis=1)][0])
 
-    return np.vstack(snapped)
+    positions[mask] = np.vstack(snapped)
+
+    return positions
