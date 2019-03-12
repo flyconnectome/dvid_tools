@@ -84,8 +84,8 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50, tip_dist=50,
     # Turn into DataFrame
     n, header = utils.parse_swc_str(n)
 
-    # Find leaf nodes
-    leafs = n[~n.node_id.isin(n.parent_id.values)]
+    # Find leaf and root nodes
+    leafs = n[(~n.node_id.isin(n.parent_id.values)) | (n.parent_id <= 0)]
 
     # Remove potential duplicated leafs
     if tip_dist:
