@@ -8,25 +8,32 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 
-from scipy.spatial.distance import cdist
+from collections import OrderedDict
+from scipy.spatial.distance import cdist, pdist, squareform
 from tqdm import tqdm
 
 
-def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
-                pos_filter=None, save_to=None, verbose=True,
+def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50, tip_dist=50,
+                pos_filter=None, save_to=None, verbose=True, snap=True,
                 server=None, node=None):
     """ Detects potential open ends on a given neuron.
 
-    In brief, this script gets the skeleton's leaf nodes and checks if they
-    are in proximity to a postsynaptic density (PSD). If not, the tip is
-    flagged a potential open end.
+    In brief, the workflow is as follows:
+      1. Extract tips from the neuron's skeleton
+      2. Remove duplicate tips (see ``tip_dist``)
+      3. Snap tip positions back to mesh (see ``snap``)
+      4. Remove tips in vicinity of PSDs (see ``psd_dist``)
+      5. Remove tips close to DONE tags (see ``done_dist``)
+      6. Remove tips close to a previously checked assignment
+         (see ``checked_dist``)
+      7. Sort tips by radius and return
 
     Parameters
     ----------
     x :             single body ID
     psd_dist :      int | None, optional
-                    Minimum distance (in raw units) to a PSD for a tip to be
-                    considered "done".
+                    Minimum distance (in raw units) to a postsynaptic density
+                    (PSD) for a tip to be considered "done".
     done_dist :     int | None,
                     Minimum distance (in raw units) to a DONE tag for a tip
                     to be considered "done".
@@ -34,12 +41,19 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
                     Minimum distance (in raw units) to a bookmark that has
                     previously been "Set Checked" in the "Assigned bookmarks"
                     table in Neutu.
+    tip_dist :      int | None, optional
+                    If a given pair of tips is closer than this distance they
+                    will be considered duplicates and one of them will be
+                    dropped.
     pos_filter :    function, optional
                     Function to tips by position. Must accept
                     numpy array (N, 3) and return array of [True, False, ...]
     save_to :       filepath, optional
                     If provided will save open ends to JSON file that can be
                     imported as assigmnents.
+    snap :          bool, optional
+                    If True, will make sure that tips positions are within the
+                    mesh.
     server :        str, optional
                     If not provided, will try reading from global.
     node :          str, optional
@@ -48,8 +62,21 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
     Return
     ------
     pandas.DataFrame
-                    Open ends. Only if ``save_to=None``.
+                    List of potential open ends.
+
+    Examples
+    --------
+    >>> import dvidtools as dt
+    >>> dt.set_param('http://your.server.com:8000', 'node', 'user')
+    >>> # Generate list of tips and save to json file
+    >>> tips = dt.detect_tips(883338122, save_to='~/Documents/883338122.json')
     """
+
+    # TODOs:
+    # - add some sort of confidence based on (a) distance to next PSD and
+    #   radius --> use our ground truth to calibrate
+    # - add examples
+    # - use tortuosity?
 
     # Get the skeleton
     n = fetch.get_skeleton(x, save_to=None, server=server, node=node)
@@ -59,6 +86,25 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
 
     # Find leaf nodes
     leafs = n[~n.node_id.isin(n.parent_id.values)]
+
+    # Remove potential duplicated leafs
+    if tip_dist:
+        # Get all by all distance
+        dist = squareform(pdist(leafs[['x', 'y', 'z']].values))
+        # Set upper triangle (including self dist) to infinite so that we only
+        # get (A->B) and not (B->A) distances
+        dist[np.triu_indices(dist.shape[0])] = float('inf')
+        # Extract those that are too close
+        too_close = list(set(np.where(dist < tip_dist)[0]))
+        # Drop 'em
+        leafs = leafs.reset_index().drop(too_close, axis=0).reset_index()
+
+    # Skeletons can end up outside the body's voxels - let's snap 'em back
+    if snap:
+        leafs.loc[:, ['x', 'y', 'z']] = fetch.snap_to_body(x,
+                                                           leafs[['x', 'y', 'z']].values,
+                                                           server=server,
+                                                           node=node)
 
     if pos_filter:
         # Get filter
@@ -121,7 +167,8 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
             # We will look for the assigment in a small window in case the
             # tip has moved slightly between iterations
             ass = fetch.get_assignment_status(pos, window=[checked_dist]*3,
-                                              server=server, node=node)
+                                              bodyid=x, server=server,
+                                              node=node)
 
             if any([l.get('checked', False) for l in ass]):
                 checked.append(True)
@@ -139,12 +186,13 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
     leafs.sort_values('radius', ascending=False, inplace=True)
 
     if verbose:
-        d = {'open ends': leafs.shape[0],
-             'total ends': n_leafs,
-             'at PSD': psd_filtered,
-             'at Done tag': done_filtered,
-             'at checked assignment': checked_filtered,
-            }
+        d = OrderedDict({
+                        'Total tips': n_leafs,
+                        'PSD filtered': psd_filtered,
+                        'Done tag filtered': done_filtered,
+                        'Checked assignment filtered': checked_filtered,
+                        'Tips left': leafs.shape[0],
+                       })
         print(pd.DataFrame.from_dict(d, orient='index', columns=[x]))
 
     if save_to:
@@ -155,10 +203,14 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50,
                 'url': 'https://github.com/flyconnectome/dvid_tools',
                 'parameters' : {'psd_dist': psd_dist,
                                 'done_dost': done_dist,
-                                'checked_dist': checked_dist}}
+                                'checked_dist': checked_dist,
+                                'snap': snap,
+                                'tip_dist': tip_dist,
+                                'node': node,
+                                'server': server}}
         _ = utils.gen_assignments(leafs, save_to=save_to, meta=meta)
-    else:
-        return leafs.reset_index(drop=True)
+
+    return leafs.reset_index(drop=True)
 
 
 
