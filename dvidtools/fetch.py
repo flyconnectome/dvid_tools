@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from io import StringIO
+from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
 
@@ -471,7 +472,7 @@ def get_body_profile(bodyid, server=None, node=None):
     return r.json()
 
 
-def get_assignment_status(pos, window=None, server=None, node=None):
+def get_assignment_status(pos, window=None, bodyid=None, server=None, node=None):
     """ Returns assignment status at given position.
 
     Checking/unchecking assigments leaves invisible "bookmarks" at the given
@@ -1172,3 +1173,56 @@ def get_adjacency(sources, targets=None, pos_filter=None, ignore_autapses=True,
         cn = cn.T
 
     return cn
+
+
+def snap_to_body(bodyid, positions, server=None, node=None):
+    """ Snap a set of positions to the closest voxels on a given body.
+
+    Parameters
+    ----------
+    bodyid :    body ID
+                Body for which to find positions.
+    positions : array-like
+                List/Array of (x, y, z) raw(!) coordinates.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    (x, y, z)
+    """
+
+    # Parse body ID
+    bodyid = utils.parse_bid(bodyid)
+
+    if isinstance(positions, pd.DataFrame):
+        positions = positions[['x','y','z']].values
+    elif not isinstance(positions, np.ndarray):
+        positions = np.array(positions)
+
+    # First get voxels of the coarse neuron
+    voxels = get_neuron(bodyid, scale='coarse', ret_type='INDEX',
+                        server=server, node=node) * 64
+
+    # For each position find a corresponding coarse voxel
+    dist = cdist(positions, voxels)
+    closest = voxels[np.argmin(dist, axis=1)]
+
+    # Now query the more precise mesh for these coarse voxels
+    snapped = []
+    for v in tqdm(closest, leave=False, desc='Snapping'):
+        # Generate a bounding bbox
+        bbox = np.vstack([v,v]).T
+        bbox[:, 1] += 63
+
+        fine = get_neuron(bodyid, scale=0, ret_type='INDEX',
+                          bbox=bbox.ravel(),
+                          server=server, node=node)
+
+        dist = cdist([v], fine)
+
+        snapped.append(fine[np.argmin(dist, axis=1)][0])
+
+    return np.vstack(snapped)
