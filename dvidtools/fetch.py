@@ -352,7 +352,8 @@ def get_multiple_bodyids(pos, server=None, node=None):
     Parameters
     ----------
     pos :       iterable
-                [[x1, y1, z1], [x2, y2, z2], ..] positions to query.
+                [[x1, y1, z1], [x2, y2, z2], ..] positions to query. Must be
+                integers!
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -367,11 +368,13 @@ def get_multiple_bodyids(pos, server=None, node=None):
     if isinstance(pos, np.ndarray):
         pos = pos.tolist()
 
-    bodies = requests.request('GET',
-                              url="{}/api/node/{}/segmentation/labels".format(server, node),
-                              json=pos).json()
+    r = requests.request('GET',
+                         url="{}/api/node/{}/segmentation/labels".format(server, node),
+                         json=pos)
 
-    return bodies
+    r.raise_for_status()
+
+    return r.json()
 
 
 def get_body_position(bodyid, server=None, node=None):
