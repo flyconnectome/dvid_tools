@@ -167,7 +167,8 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50, tip_dist=50,
             # We will look for the assigment in a small window in case the
             # tip has moved slightly between iterations
             ass = fetch.get_assignment_status(pos, window=[checked_dist]*3,
-                                              bodyid=x, server=server,
+                                              bodyid=x if snap else None,
+                                              server=server,
                                               node=node)
 
             if any([l.get('checked', False) for l in ass]):
