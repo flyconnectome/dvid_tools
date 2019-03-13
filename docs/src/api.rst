@@ -27,7 +27,6 @@ Reading/Writing Data
     get_n_synapses
     get_neuron
     get_roi
-    get_roi2
     get_segmentation_info
     get_skeleton
     get_synapses

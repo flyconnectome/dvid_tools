@@ -629,65 +629,32 @@ def get_available_rois(server=None, node=None, step_size=2):
     return r.json()
 
 
-def get_roi(roi, voxel_size=(32, 32, 32), server=None, node=None,
-            step_size=2, return_raw=False):
-    """ Get faces and vertices of ROI.
+def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
+            save_to=None, server=None, node=None):
+    """ Get ROI as either mesh, voxels or ``.obj`` file.
 
-    Uses marching cube algorithm to extract surface model of block ROI.
+    Uses marching cube algorithm to extract surface model of ROI voxels. The
+    ``.obj`` files are precomputed on the server.
+
+    Important
+    ---------
+    Please note that some ROIs exist only as voxels or as ``.obj``. In that
+    case function will raise "Bad Request" HttpError.
 
     Parameters
     ----------
     roi :           str
                     Name of ROI.
+    form :          "MESH" | "OBJ" | "VOXELS" | "BLOCK", optional
+                    Returned format - see ``Returns``.
     voxel_size :    iterable
-                    (3, ) iterable of voxel sizes.
-    server :        str, optional
-                    If not provided, will try reading from global.
-    node :          str, optional
-                    If not provided, will try reading from global.
+                    (3, ) iterable of voxel sizes. Only relevant for
+                    ``form="MESH"``.
     step_size :     int, optional
-                    Step size for marching cube algorithm.
-                    Smaller values = higher resolution but slower.
-    return_raw :    bool, optional
-                    If True, will return raw block data instead of faces and
-                    verts. Might not exists for all ROIs!
-
-    Returns
-    -------
-    vertices :      numpy.ndarray
-                    Coordinates are in nm.
-    faces :         numpy.ndarray
-    """
-
-    server, node, user = eval_param(server, node)
-
-    r = requests.get('{}/api/node/{}/{}/roi'.format(server, node, roi))
-
-    r.raise_for_status()
-
-    # The data returned are block coordinates: [x, y, z_start, z_end]
-    blocks = r.json()
-
-    if return_raw:
-        return blocks
-
-    verts, faces = mesh.mesh_from_voxels(np.array(blocks), v_size=voxel_size,
-                                         step_size=step_size)
-
-    return verts, faces
-
-
-def get_roi2(roi, save_to=None, server=None, node=None):
-    """ Get `.obj` for ROI.
-
-
-    Parameters
-    ----------
-    roi :           str
-                    Name of ROI.
-    save_to :       str | None, optional
-                    If provided, will not return string but instead
-                    save as file.
+                    Step size for marching cube algorithm. Only relevant for
+                    ``form="MESH"``. Smaller values = higher resolution but
+                    slower.
+    save_to :       filename
     server :        str, optional
                     If not provided, will try reading from global.
     node :          str, optional
@@ -695,27 +662,55 @@ def get_roi2(roi, save_to=None, server=None, node=None):
 
     Returns
     -------
-    str
+    vertices, faces :   numpy arrays
+                        If ``format=='MESH'``. Coordinates in nm.
+    voxels :            numpy array
+                        If ``format=='VOXELS'``.
+    blocks :            numpy array
+                        If ``format=='BLOCKS'``. Encode blocks of voxels as
+                        4 coordinates: ``[z, y, x_start, x_end]``
+    OBJ :               str
+                        ``.obj`` string. Only if ``save_to=None``.
     """
 
     server, node, user = eval_param(server, node)
 
-    # Get the key for this roi
-    r = requests.get('{}/api/node/{}/rois/key/{}'.format(server, node, roi))
-    r.raise_for_status()
-    key = r.json()['->']['key']
+    if form.upper() in ['MESH', 'VOXELS', 'BLOCKS']:
+        r = requests.get('{}/api/node/{}/{}/roi'.format(server, node, roi))
 
-    # Get the obj string
-    r = requests.get('{}/api/node/{}/roi_data/key/{}'.format(server, node, key))
-    r.raise_for_status()
+        r.raise_for_status()
 
-    if save_to:
-        with open(save_to, 'w') as f:
-            f.write(r.text)
-        return
+        # The data returned are block coordinates: [z, y, x_start, x_end]
+        blocks = np.array(r.json())
 
-    # The data returned is in .obj format
-    return r.text
+        if form.upper() == 'BLOCKS':
+            return blocks
+        elif form.upper() == 'VOXELS':
+            return mesh._blocks_to_voxels(blocks)
+
+        verts, faces = mesh.mesh_from_voxels(blocks,
+                                             v_size=voxel_size,
+                                             step_size=step_size)
+        return verts, faces
+    elif form.upper() == 'OBJ':
+        # Get the key for this roi
+        r = requests.get('{}/api/node/{}/rois/key/{}'.format(server, node, roi))
+        r.raise_for_status()
+        key = r.json()['->']['key']
+
+        # Get the obj string
+        r = requests.get('{}/api/node/{}/roi_data/key/{}'.format(server, node, key))
+        r.raise_for_status()
+
+        if save_to:
+            with open(save_to, 'w') as f:
+                f.write(r.text)
+            return
+
+        # The data returned is in .obj format
+        return r.text
+    else:
+        raise ValueError('Unknown return format "{}"'.format(form))
 
 
 def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
