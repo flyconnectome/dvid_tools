@@ -71,7 +71,7 @@ def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None,
     file. This requires `navis <https://navis.readthedocs.io>`_
     and ``rpy2`` to be installed.
 
-    >>> from navis.interfaces
+    >>> from navis.interfaces import r
     >>> from rpy2.robjects.packages import importr
     >>> importr('nat.jrcfibf')
     >>> dvidtools.get_skeleton(485775679,
@@ -764,7 +764,6 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
 
     if isinstance(scale, int) and scale > info['MaxDownresLevel']:
         raise ValueError('Scale greater than MaxDownresLevel')
-
 
     if not isinstance(bbox, type(None)):
         url = '{}/api/node/{}/segmentation/sparsevol/{}'.format(server, node, bodyid)
