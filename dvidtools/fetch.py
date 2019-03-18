@@ -36,8 +36,8 @@ def eval_param(server=None, node=None, user=None):
     return [parsed[n] for n in ['server', 'node', 'user']]
 
 
-def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None,
-                 verbose=True):
+def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
+                 server=None, node=None, verbose=True):
     """ Download skeleton as SWC file.
 
     Parameters
@@ -46,11 +46,24 @@ def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None,
                 ID(s) of body for which to download skeleton.
     save_to :   str | None, optional
                 If provided, will save SWC to file. If str must be file or
-                path.
+                path. Please note that using ``heal`` or ``reroot`` will
+                require the SWC table to be cleaned-up using
+                ``dvidtools.refurbish_table`` before saving to keep it in line
+                with SWC format. This will change node IDs!
     xform :     function, optional
                 If provided will run this function to transform coordinates
                 before saving/returning the SWC file. Function must accept
-                ``(N, 3)`` numpy array.
+                ``(N, 3)`` numpy array. Nodes that don't transform properly
+                will be removed and disconnected piece will be healed.
+    soma :      array-like | function, optional
+                Use to label ("1")  and reroot to soma node:
+                  - array-like is interpreted as x/y/z position and will be
+                    mapped to the closest node
+                  - ``function`` must accept ``bodyid`` and return x/y/z
+                    array-like
+    heal :      bool, optional
+                If True, will heal fragmented neurons using
+                ``dvidtools.heal_skeleton``.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -58,7 +71,7 @@ def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None,
 
     Returns
     -------
-    SWC :       str
+    SWC :       pandas.DataFrame
                 Only if ``save_to=None``.
 
     Examples
@@ -111,35 +124,67 @@ def get_skeleton(bodyid, save_to=None, xform=None, server=None, node=None,
             print(r.text)
         return None
 
-    if callable(xform):
-        # Parse SWC string
-        df, header = utils.parse_swc_str(r.text)
+    # Parse SWC string
+    df, header = utils.parse_swc_str(r.text)
 
+    # Heal first as this might change node IDs
+    if heal:
+        utils.heal_skeleton(df, inplace=True)
+
+    # If soma is function, call it
+    if callable(soma):
+        soma = soma(bodyid)
+
+    # If we have a soma
+    if isinstance(soma, (list, tuple, np.ndarray)):
+        # Get soma node
+        soma_node = utils._snap_to_skeleton(df, soma)
+
+        # Set label
+        df.loc[df.node_id == soma_node, 'label'] = 1
+
+        # Reroot
+        utils.reroot_skeleton(df, soma_node, inplace=True)
+
+    if callable(xform):
         # Add xform function to header for documentation
         header += '#x/y/z coordinates transformed by dvidtools using this:\n'
-        header += '\n'.join(['#' + l for l in inspect.getsource(xform).split('\n')])
+        header += '\n'.join(['#' + l for l in inspect.getsource(xform).split('\n') if l])
+        header += '\n'
 
         # Transform coordinates
         df.iloc[:, 2:5] = xform(df.iloc[:, 2:5].values)
 
-        # Turn DataFrame back into string
-        s = StringIO()
-        df.to_csv(s, sep=' ', header=False)
-
-        # Replace text
-        swc = header + s.getvalue()
+        # Check if any coordinates got messed up
+        nans = df[np.any(df.iloc[:, 2:5].isnull(), axis=1)]
+        if not nans.empty:
+            if verbose:
+                print('{} nodes did not xform - removing & stitching...'.format(nans.shape[0]))
+            # Drop nans
+            df.drop(nans.index, inplace=True)
+            # Keep track of existing root (if any left)
+            root = df.loc[df.parent_id < 0, 'node_id']
+            root = root.values[0] if not root.empty else None
+            # Set orphan nodes to roots
+            df.loc[~df.parent_id.isin(df.node_id), 'parent_id'] = -1
+            # Heal fragments
+            utils.heal_skeleton(df, root=root, inplace=True)
     elif not isinstance(xform, type(None)):
         raise TypeError('"xform" must be a function, not "{}"'.format(type(x)))
-    else:
-        swc = r.text
 
     if save_to:
+        # Make sure table is still conform with SWC format
+        if heal or not isinstance(soma, type(None)):
+            df = utils.refurbish_table(df)
+
+        # Generate proper filename if necessary
         if os.path.isdir(save_to):
             save_to = os.path.join(save_to, '{}.swc'.format(bodyid))
-        with open(save_to, 'w') as f:
-            f.write(swc)
+
+        # Save SWC file
+        utils.save_swc(df, filename=save_to, header=header)
     else:
-        return swc
+        return df
 
 
 def get_user_bookmarks(server=None, node=None, user=None,
