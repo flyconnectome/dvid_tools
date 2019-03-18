@@ -2,9 +2,210 @@
 # and is released under GNU GPL3
 
 import json
+import networkx as nx
 import pandas as pd
+import numpy as np
 
 from io import StringIO
+from itertools import combinations
+from scipy.spatial.distance import pdist, cdist, squareform
+
+
+def swc_to_graph(x):
+    """ NetworkX DiGraph from SWC DataFrame.
+
+    Parameters
+    ----------
+    x :         pandas DataFrame
+                SWC table.
+
+    Returns
+    -------
+    networkx.DiGraph
+    """
+
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
+
+    edges = x.loc[x.parent_id > 0, ['node_id', 'parent_id']].values.astype(object)
+
+    nlocs =  x.set_index('node_id').loc[edges[:, 0],['x','y','z']].values
+    plocs = x.set_index('node_id').loc[edges[:, 1],['x','y','z']].values
+
+    weights = np.sqrt(np.sum((nlocs - plocs)**2, axis=1))
+
+    weighted_edges = np.append(edges, weights.reshape(len(weights), 1), axis=1)
+
+    g = nx.DiGraph()
+
+    # Add edges
+    g.add_weighted_edges_from(weighted_edges)
+
+    # Add positions
+    nx.set_node_attributes(g, {r.node_id: np.array([r.x, r.y, r.z]) for r in x.itertuples()}, name='location')
+    nx.set_node_attributes(g, {r.node_id: r.radius for r in x.itertuples()}, name='radius')
+
+    return g
+
+
+def reroot_skeleton(x, new_root, inplace=False):
+    """ Reroots skeleton to new root.
+
+    For fragmented skeletons, only the root within the new_root's connected
+    component will be changed.
+
+    Node order might not conform to SWC standard after healing. Use
+    ``dvidtools.refurbish_table`` to fix that.
+
+    Parameters
+    ----------
+    x :         pandas.DataFrame
+                SWC table to reroot.
+    new_root :  int
+                New root ID.
+
+    Returns
+    -------
+    SWC:        pandas.DataFrame
+
+    """
+
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
+
+    if new_root not in x.node_id.values:
+        raise ValueError('New root node not found')
+
+    if x.set_index('node_id').loc[new_root, 'parent_id'] < 0:
+        return x
+
+    # Turn skeleton into Graph
+    g = swc_to_graph(x)
+
+    # Walk from new root to old root and keep track of visited edges
+    seen = [new_root]
+    p = next(g.successors(new_root), None)
+    while p:
+        seen.append(p)
+        p = next(g.successors(p), None)
+
+    # Invert path and change parents
+    swc = x.copy() if not inplace else x
+    new_p = {v: u for u, v in zip(seen[:-1], seen[1:])}
+    swc.loc[swc.node_id.isin(seen), 'parent_id'] = swc.loc[swc.node_id.isin(seen)].node_id.map(lambda x: new_p.get(x, -1))
+
+    if not inplace:
+        return swc
+
+
+def heal_skeleton(x, root=None, inplace=False):
+    """ Merges fragmented skeleton using minimum spanning tree to connect
+    disconnected components.
+
+    Important
+    ---------
+    Node order might not conform to SWC standard after healing. Use
+    ``dvidtools.refurbish_table`` to fix that.
+
+    Parameters
+    ----------
+    x :         pandas.DataFrame
+                SWC table to heal.
+    root :      int | None, optional
+                New root. If None, will use an existing root.
+
+    Returns
+    -------
+    SWC:        pandas.DataFrame
+    """
+
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
+
+    # If not fragmented, simply return
+    if x[x.parent_id < 0].shape[0] <= 1:
+        return x
+
+    # Turn skeleton into Graph
+    g = swc_to_graph(x)
+
+    # Set existing edges to zero weight to make sure they remain when
+    # calculating the minimum spanning tree
+    nx.set_edge_attributes(g, 0, 'weight')
+
+    # Calculate distance between all leafs
+    leafs = x[~x.node_id.isin(x.parent_id) | (x.parent_id < 0)]
+    d = pdist(leafs[['x','y','z']].values)
+
+    # Generate new edges
+    edges = np.array(list(combinations(leafs.node_id.values, 2)))
+    edges = np.append(edges.astype(object), d.reshape(d.size, 1), axis=1)
+
+    g.add_weighted_edges_from(edges)
+
+    # Get minimum spanning tree
+    st = nx.minimum_spanning_tree(g.to_undirected())
+
+    # Now we have to make sure that all edges are correctly oriented
+    if not root:
+        root = x.loc[x.parent_id < 0, 'node_id'].values[0]
+    tree = nx.bfs_tree(st, source=root)
+    tree = nx.reverse(tree, copy=False)
+
+    # Now do some cleaning up
+    swc = x.copy() if not inplace else x
+
+    # Map new parents
+    lop = {n : next(tree.successors(n)) for n in tree if tree.out_degree(n)}
+    swc['parent_id'] = swc.node_id.map(lambda x: lop.get(x, -1))
+
+    # Make sure parent IDs are in ascending order (according to SWC standard)
+    swc.sort_values('parent_id', inplace=True)
+
+    # Reorder node IDs
+    swc.reset_index(drop=True, inplace=True)
+    lon = {k: v for k, v in zip(swc.node_id.values, swc.index.values + 1)}
+    swc['node_id'] = swc.index.values + 1
+    swc['parent_id'] = swc.parent_id.map(lambda x: lon.get(x, -1))
+
+    if not inplace:
+        return swc
+
+
+def refurbish_table(x, inplace=False):
+    """ Refurbishes SWC table to keep in conform with official format.
+
+    Important
+    ---------
+    This operation can change node IDs!
+
+    Parameters
+    ----------
+    x :         pandas.DataFrame
+                SWC table to refurbish.
+
+    Returns
+    -------
+    SWC:        pandas.DataFrame
+
+    """
+
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
+
+    swc = x.copy() if not inplace else x
+
+    # Make sure parent IDs are in ascending order
+    swc.sort_values('parent_id', inplace=True)
+
+    # Reorder node IDs
+    swc.reset_index(drop=True, inplace=True)
+    lon = {k: v for k, v in zip(swc.node_id.values, swc.index.values + 1)}
+    swc['node_id'] = swc.index.values + 1
+    swc['parent_id'] = swc.parent_id.map(lambda x: lon.get(x, -1))
+
+    if not inplace:
+        return swc
 
 
 def verify_payload(data, required, required_only=True):
@@ -78,6 +279,35 @@ def parse_swc_str(x):
     return df, header
 
 
+def save_swc(x, filename, header=''):
+    """ Save SWC DataFrame to file.
+
+    Parameters
+    ----------
+    x :         pandas.DataFrame
+                SWC table to save.
+    filename :  str
+    header :    str, optional
+                Header to add in front of SWC table. Each line must begin
+                with "#"!
+    """
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
+
+    if not isinstance(header, str):
+        raise TypeError('Header must be str, got "{}"'.format(type(header)))
+
+    # Turn DataFrame back into string
+    s = StringIO()
+    x.to_csv(s, sep=' ', header=False, index=False)
+
+    # Replace text
+    swc = header + s.getvalue()
+
+    with open(filename, 'w') as f:
+        f.write(swc)
+
+
 def gen_assignments(x, save_to=None, meta={}):
     """ Generates JSON file that can be imported into neutu as assignments.
 
@@ -127,4 +357,30 @@ def parse_bid(x):
         return int(x)
     except:
         raise ValueError('Unable to coerce "{}" into numeric body ID'.format(x))
+
+
+def _snap_to_skeleton(x, pos):
+    """ Snaps position to closest node.
+
+    Parameters
+    ----------
+    x :     pandas.DataFrame
+            SWC DataFrame.
+    pos :   array-like
+            x/y/z position.
+
+    Returns
+    -------
+    node ID :       int
+    """
+
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError('x must be pandas DataFrame, got "{}"'.format(type(x)))
+
+    if not isinstance(pos, np.ndarray):
+        pos = np.array(pos)
+
+    dist = np.sum((x[['x', 'y', 'z']].values - pos)**2, axis=1)
+
+    return x.iloc[np.argmin(dist)].node_id.astype(int)
 
