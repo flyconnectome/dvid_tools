@@ -5,3 +5,4 @@ tqdm>=4.28.1
 scikit-image>=0.14.1
 scipy
 requests
+networkx
