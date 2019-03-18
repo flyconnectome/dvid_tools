@@ -16,17 +16,19 @@ Make sure you have `Python 3 <https://www.python.org>`_,
 
 
 What can ``dvidtools`` do for you?
---------------------------------
+----------------------------------
 
-- get/set user bookmarks
-- get/set neuron annotations (names)
-- download meshes, skeletons (SWCs) and ROIs
-- get basic neuron info (# of voxels/synapses)
-- get synapses
-- get connectivity (adjacency matrix, connectivity table)
-- retrieve labels (TODO, to split, etc)
-- map positions to body IDs
-- detect potential open ends (based on a script by `Stephen Plaza <https://github.com/stephenplaza>`_)
+- :func:`get <dvidtools.fetch.get_user_bookmarks>`/ :func:`set <dvidtools.fetch.add_bookmarks>` user bookmarks
+- :func:`get <dvidtools.fetch.get_annotation>`/:func:`set <dvidtools.fetch.edit_annotation>` neuron annotations (names)
+- download :func:`meshes <dvidtools.fetch.get_neuron>`, :func:`skeletons <dvidtools.fetch.get_skeleton>` (SWCs) and :func:`ROIs <dvidtools.fetch.get_roi>`
+- get basic neuron info (# of :func:`voxels <dvidtools.fetch.get_body_profile>`/:func:`info <dvidtools.fetch.get_n_synapses>`)
+- get :func:`synapses <dvidtools.fetch.get_synapses>`
+- get connectivity (:func:`adjacency matrix <dvidtools.fetch.get_body_profile>`, :func:`connectivity table <dvidtools.fetch.get_connectivity>`)
+- retrieve :func:`info <dvidtools.fetch.get_labels_in_area>` (TODO, to split, etc)
+- map :func:`position <dvidtools.fetch.get_body_position>` to body IDs
+- detect potential open :func:`ends <dvidtools.tip.detect_tips>` (based on a script by `Stephen Plaza <https://github.com/stephenplaza>`_)
+
+Check out the full :doc:`API </src/api>` for more.
 
 Examples
 --------

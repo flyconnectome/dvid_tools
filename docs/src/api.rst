@@ -52,4 +52,8 @@ Utility
 
     parse_swc_str
     gen_assignments
+    heal_skeleton
+    reroot_skeleton
+    save_swc
+
 
