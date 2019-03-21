@@ -5,6 +5,9 @@ Python tools to fetch data from [DVID](https://github.com/janelia-flyem/dvid) se
 
 Find the documentation [here](https://dvidtools.readthedocs.io)
 
+If you want to query a neuPrint server, check out [neuprint-python](https://github.com/schlegelp/neuprint-python)
+instead.
+
 ## Install
 
 Make sure you have [Python 3](https://www.python.org),
