@@ -41,6 +41,11 @@ def swc_to_graph(x):
     # Add edges
     g.add_weighted_edges_from(weighted_edges)
 
+    # Add disconnected nodes as they do not show in edge list
+    disc = x[(x.parent_id < 0) & (~x.node_id.isin(x.parent_id))]
+    if not disc.empty:
+        g.add_nodes_from(disc.node_id.values)
+
     # Add positions
     nx.set_node_attributes(g, {r.node_id: np.array([r.x, r.y, r.z]) for r in x.itertuples()}, name='location')
     nx.set_node_attributes(g, {r.node_id: r.radius for r in x.itertuples()}, name='radius')
