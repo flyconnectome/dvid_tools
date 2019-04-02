@@ -4,10 +4,12 @@
 from . import decode
 from . import mesh
 from . import utils
+from . import config
 
 import inspect
 import os
 import requests
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -15,7 +17,6 @@ import pandas as pd
 from io import StringIO
 from scipy.spatial.distance import cdist
 from tqdm import tqdm
-
 
 def set_param(server=None, node=None, user=None):
     """ Set default server, node and/or user."""
@@ -115,7 +116,10 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
 
     server, node, user = eval_param(server, node)
 
-    r = requests.get('{}/api/node/{}/segmentation_skeletons/key/{}_swc'.format(server, node, bodyid))
+    r = requests.get('{}/api/node/{}/{}_skeletons/key/{}_swc'.format(server,
+                                                                     node,
+                                                                     config.segmentation,
+                                                                     bodyid))
 
     #r.raise_for_status()
 
@@ -150,7 +154,6 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
         # Add xform function to header for documentation
         header += '#x/y/z coordinates transformed by dvidtools using this:\n'
         header += '\n'.join(['#' + l for l in inspect.getsource(xform).split('\n') if l])
-        header += '\n'
 
         # Transform coordinates
         df.iloc[:, 2:5] = xform(df.iloc[:, 2:5].values)
@@ -300,7 +303,10 @@ def get_annotation(bodyid, server=None, node=None, verbose=True):
     """
     server, node, user = eval_param(server, node)
 
-    r = requests.get('{}/api/node/{}/segmentation_annotations/key/{}'.format(server, node, bodyid))
+    r = requests.get('{}/api/node/{}/{}_annotations/key/{}'.format(server,
+                                                                   node,
+                                                                   config.body_labels,
+                                                                   bodyid))
 
     try:
         return r.json()
@@ -310,7 +316,7 @@ def get_annotation(bodyid, server=None, node=None, verbose=True):
         return {}
 
 
-def edit_annotation(bodyid, annotation, server=None, node=None):
+def edit_annotation(bodyid, annotation, server=None, node=None, verbose=True):
     """ Edit annotations for given body.
 
     Parameters
@@ -336,6 +342,9 @@ def edit_annotation(bodyid, annotation, server=None, node=None):
                     If not provided, will try reading from global.
     node :          str, optional
                     If not provided, will try reading from global.
+    verbose :       bool, optional
+                    If True, will warn if entirely new annotations are added
+                    (as opposed to just updating existing annotations)
 
     Returns
     -------
@@ -350,18 +359,31 @@ def edit_annotation(bodyid, annotation, server=None, node=None):
     >>> # Update annotation
     >>> dvidtools.edit_annotation('1700937093', an)
     """
+
+    if not isinstance(annotation, dict):
+        raise TypeError('Annotation must be dictionary, not "{}"'.format(type(annotation)))
+
     server, node, user = eval_param(server, node)
 
     bodyid = utils.parse_bid(bodyid)
 
     # Get existing annotations
-    old_an = get_annotation(bodyid, server=server, node=node)
+    old_an = get_annotation(bodyid, server=server, node=node, verbose=False)
 
-    # Compile new annotations
-    new_an = {k: annotation.get(k, v) for k, v in old_an.items()}
+    # Raise non-standard payload
+    new_an = [k for k in annotation if k not in old_an]
+    if new_an and verbose:
+        warnings.warn('Adding new annotation(s) to {}: {}'.format(bodyid,
+                                                                  ', '.join(new_an)))
 
-    r = requests.post('{}/api/node/{}/segmentation_annotations/key/{}'.format(server, node, bodyid),
-                      json=new_an)
+    # Update annotations
+    old_an.update(annotation)
+
+    r = requests.post('{}/api/node/{}/{}_annotations/key/{}'.format(server,
+                                                                    node,
+                                                                    config.body_labels,
+                                                                    bodyid),
+                      json=old_an)
 
     # Check if it worked
     r.raise_for_status()
@@ -387,7 +409,10 @@ def get_body_id(pos, server=None, node=None):
     """
     server, node, user = eval_param(server, node)
 
-    r = requests.get('{}/api/node/{}/segmentation/label/{}_{}_{}'.format(server, node, pos[0], pos[1], pos[2]))
+    r = requests.get('{}/api/node/{}/{}/label/{}_{}_{}'.format(server, node,
+                                                               config.segmentation,
+                                                               pos[0], pos[1],
+                                                               pos[2]))
 
     return r.json()['Label']
 
@@ -415,7 +440,9 @@ def get_multiple_bodyids(pos, server=None, node=None):
         pos = pos.tolist()
 
     r = requests.request('GET',
-                         url="{}/api/node/{}/segmentation/labels".format(server, node),
+                         url="{}/api/node/{}/{}/labels".format(server,
+                                                               node,
+                                                               config.segmentation),
                          json=pos)
 
     r.raise_for_status()
@@ -510,7 +537,7 @@ def get_body_profile(bodyid, server=None, node=None):
     bodyid = utils.parse_bid(bodyid)
 
     r = requests.request('GET',
-                              url="{}/api/node/{}/segmentation/sparsevol-size/{}".format(server, node, bodyid))
+                              url="{}/api/node/{}/{}/sparsevol-size/{}".format(server, node, config.segmentation, bodyid))
 
     r.raise_for_status()
 
@@ -630,9 +657,10 @@ def get_labels_in_area(offset, size, server=None, node=None):
     """
     server, node, user = eval_param(server, node)
 
-    r = requests.get('{}/api/node/{}/segmentation_todo/elements/'
+    r = requests.get('{}/api/node/{}/{}_todo/elements/'
                      '{}_{}_{}/{}_{}_{}'.format(server,
                                                 node,
+                                                config.segmentation,
                                                 int(size[0]),
                                                 int(size[1]),
                                                 int(size[2]),
@@ -811,7 +839,8 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
         raise ValueError('Scale greater than MaxDownresLevel')
 
     if not isinstance(bbox, type(None)):
-        url = '{}/api/node/{}/segmentation/sparsevol/{}'.format(server, node, bodyid)
+        url = '{}/api/node/{}/{}/sparsevol/{}'.format(server, node,
+                                                      config.segmentation, bodyid)
         url += '?minx={}&maxx={}&miny={}&maxy={}&minz={}&maxz={}'.format(int(bbox[0]),
                                                                          int(bbox[1]),
                                                                          int(bbox[2]),
@@ -819,14 +848,20 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
                                                                          int(bbox[4]),
                                                                          int(bbox[5]))
     elif scale == 'coarse':
-        url = '{}/api/node/{}/segmentation/sparsevol-coarse/{}'.format(server, node, bodyid)
+        url = '{}/api/node/{}/{}/sparsevol-coarse/{}'.format(server, node,
+                                                             config.segmentation,
+                                                             bodyid)
     else:
-        url = '{}/api/node/{}/segmentation/sparsevol/{}?scale={}'.format(server, node, bodyid, scale)
+        url = '{}/api/node/{}/{}/sparsevol/{}?scale={}'.format(server, node,
+                                                               config.segmentation,
+                                                               bodyid, scale)
 
     r = requests.get(url)
     r.raise_for_status()
 
     b = r.content
+
+    return b
 
     if save_to:
         with open(save_to, 'wb') as f:
@@ -861,7 +896,7 @@ def get_segmentation_info(server=None, node=None):
 
     server, node, user = eval_param(server, node)
 
-    r = requests.get('{}/api/node/{}/segmentation/info'.format(server, node))
+    r = requests.get('{}/api/node/{}/{}/info'.format(server, node, config.segmentation))
 
     return r.json()
 
@@ -893,11 +928,17 @@ def get_n_synapses(bodyid, server=None, node=None):
         syn = {b: get_n_synapses(b, server, node) for b in bodyid}
         return pd.DataFrame.from_records(syn).T
 
-    r = requests.get('{}/api/node/{}/synapses_labelsz/count/{}/PreSyn'.format(server, node, bodyid))
+    r = requests.get('{}/api/node/{}/{}_labelsz/count/{}/PreSyn'.format(server,
+                                                                        node,
+                                                                        config.synapses,
+                                                                        bodyid))
     r.raise_for_status()
     pre = r.json()
 
-    r = requests.get('{}/api/node/{}/synapses_labelsz/count/{}/PostSyn'.format(server, node, bodyid))
+    r = requests.get('{}/api/node/{}/{}_labelsz/count/{}/PostSyn'.format(server,
+                                                                         node,
+                                                                         config.synapses,
+                                                                         bodyid))
     r.raise_for_status()
     post = r.json()
 
@@ -946,7 +987,7 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
 
     bodyid = utils.parse_bid(bodyid)
 
-    r = requests.get('{}/api/node/{}/synapses/label/{}?relationships={}'.format(server, node, bodyid, str(with_details).lower()))
+    r = requests.get('{}/api/node/{}/{}/label/{}?relationships={}'.format(server, node, config.synapses, bodyid, str(with_details).lower()))
 
     syn = r.json()
 
@@ -994,26 +1035,47 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
 
     server, node, user = eval_param(server, node)
 
-    cn_data = []
+    if len(source) <= len(target):
+        to_query = source
+        query_rel = 'PreSyn'
+    else:
+        to_query = target
+        query_rel = 'PostSyn'
 
-    for s in source:
-        r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=true'.format(server, node, s))
+    cn_data = []
+    for q in to_query:
+        r = requests.get('{}/api/node/{}/{}/label/{}?relationships=true'.format(server, node, config.synapses, q))
 
         # Raise
         r.raise_for_status()
 
         # Extract synapses
-        synapses = r.json()
+        syn = r.json()
+
+        if not syn:
+            continue
+
+        # Find arbitrary properties
+        props = list(set([k for s in syn for k in s['Prop'].keys()]))
 
         # Collect downstream connections
-        cn_data += [[s,
-                     syn['Pos'],
-                     syn['Prop']['conf'],
-                     r['To']] for syn in synapses if syn['Kind'] == 'PreSyn' for r in syn['Rels']]
+        this_cn = [[s['Pos'],
+                    r['To']] + [s['Prop'].get(p, None) for p in props]
+                    for s in syn if s['Kind'] == query_rel and s['Rels'] for r in s['Rels']]
 
-    cn_data = pd.DataFrame(cn_data,
-                           columns=['bodyid_pre', 'tbar_position',
-                                    'tbar_confidence', 'psd_position'])
+        df = pd.DataFrame(this_cn)
+
+        # Add columns
+        if query_rel == 'PreSyn':
+            df.columns=['tbar_position', 'psd_position'] + props
+            # If we queried sources, we now the identity of presynaptic neuron
+            df['bodyid_pre'] = q
+        else:
+            df.columns=['psd_position', 'tbar_position'] + props
+
+        cn_data.append(df)
+
+    cn_data = pd.concat(cn_data, axis=0, sort=True)
 
     if pos_filter:
         # Get filter
@@ -1025,17 +1087,38 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
         # Filter synapses
         cn_data = cn_data.loc[filtered, :]
 
-    # Get positions of PSDs
-    pos = np.vstack(cn_data.psd_position.values)
+    # Add body positions
+    if 'bodyid_pre' not in cn_data.columns:
+        # Get positions of PSDs
+        pos = np.vstack(cn_data.tbar_position.values)
 
+        # Get postsynaptic body IDs
+        bodies = requests.request('GET',
+                                  url="{}/api/node/{}/{}/labels".format(server,
+                                                                        node,
+                                                                        config.segmentation),
+                                  json=pos.tolist()).json()
+        cn_data['bodyid_pre'] = bodies
 
-    # Get postsynaptic body IDs
-    bodies = requests.request('GET',
-                              url="{}/api/node/{}/segmentation/labels".format(server, node),
-                              json=pos.tolist()).json()
-    cn_data['bodyid_post'] = bodies
+        # Filter to sources of interest
+        cn_data = cn_data[cn_data.bodyid_pre.isin(source)]
 
-    return cn_data[cn_data.bodyid_post.isin(target)]
+    if 'bodyid_post' not in cn_data.columns:
+        # Get positions of PSDs
+        pos = np.vstack(cn_data.psd_position.values)
+
+        # Get postsynaptic body IDs
+        bodies = requests.request('GET',
+                                  url="{}/api/node/{}/{}/labels".format(server,
+                                                                        node,
+                                                                        config.segmentation),
+                                  json=pos.tolist()).json()
+        cn_data['bodyid_post'] = bodies
+
+        # Filter to targets of interest
+        cn_data = cn_data[cn_data.bodyid_post.isin(target)]
+
+    return cn_data
 
 
 def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
@@ -1089,7 +1172,7 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
     bodyid = utils.parse_bid(bodyid)
 
     # Get synapses
-    r = requests.get('{}/api/node/{}/synapses/label/{}?relationships=true'.format(server, node, bodyid))
+    r = requests.get('{}/api/node/{}/{}/label/{}?relationships=true'.format(server, node, config.synapses, bodyid))
 
     # Raise
     r.raise_for_status()
@@ -1110,7 +1193,9 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
     # Collect positions and query the body IDs of pre-/postsynaptic neurons
     pos = [cn['To'] for s in syn for cn in s['Rels']]
     bodies = requests.request('GET',
-                              url="{}/api/node/{}/segmentation/labels".format(server, node),
+                              url="{}/api/node/{}/{}/labels".format(server,
+                                                                    node,
+                                                                    config.segmentation),
                               json=pos).json()
 
     # Compile connector table by counting # of synapses between neurons

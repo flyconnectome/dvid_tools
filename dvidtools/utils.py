@@ -306,6 +306,9 @@ def save_swc(x, filename, header=''):
     s = StringIO()
     x.to_csv(s, sep=' ', header=False, index=False)
 
+    if not header.endswith('\n'):
+        header += '\n'
+
     # Replace text
     swc = header + s.getvalue()
 
