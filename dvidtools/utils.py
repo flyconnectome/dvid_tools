@@ -323,7 +323,7 @@ def gen_assignments(x, save_to=None, meta={}):
     ----------
     x :         pandas.DataFrame
                 Must contain columns ``x``, ``y``, ``z`` or ``location``.
-                Optional columns: ``body ID`` and ``text``.
+                Optional columns: ``body ID``, ``text`` and ``comment``.
     save_to :   None | filepath | filebuffer, optional
                 If not None, will save json to file.
     meta :      dict, optional
@@ -344,11 +344,11 @@ def gen_assignments(x, save_to=None, meta={}):
                              'and "z" columns')
         x['location'] = x[['x','y','z']].astype(int).apply(list, axis=1)
 
-    for c in ['body ID', 'text']:
+    for c in ['body ID', 'text', 'comment']:
         if c not in x.columns:
             x[c] = ''
 
-    x = x[['location', 'text', 'body ID']]
+    x = x[['location', 'text', 'body ID', 'comment']]
 
     j = {'metadata': meta,
          'data': x.to_dict(orient='records')}
