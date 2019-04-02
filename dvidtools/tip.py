@@ -76,16 +76,15 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50, tip_dist=50,
     # - add some sort of confidence based on (a) distance to next PSD and
     #   radius --> use our ground truth to calibrate
     # - add examples
-    # - use tortuosity?
+    # - test: tortuosity, distance to HK, branch length, radius (both at tip and parent branch),
+    #         vector from parent, distance to next tip (strahler?),
+    #         vectorproduct to next closest tip (i.e. is this branch just a continuation of a broken branch)
 
     # Get the skeleton
     n = fetch.get_skeleton(x, save_to=None, server=server, node=node)
 
-    # Turn into DataFrame
-    n, header = utils.parse_swc_str(n)
-
     # Find leaf and root nodes
-    leafs = n[(~n.node_id.isin(n.parent_id.values)) | (n.parent_id <= 0)]
+    leafs = n[(~n.node_id.isin(n.parent_id.values)) | (n.parent_id <= 0)].copy()
 
     # Remove potential duplicated leafs
     if tip_dist:
@@ -130,7 +129,7 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50, tip_dist=50,
         # Is tip close to PSD?
         at_psd = np.min(dist, axis=1) < psd_dist
 
-        leafs = leafs[~at_psd]
+        leafs = leafs.loc[~at_psd]
 
     psd_filtered = n_leafs - leafs.shape[0]
 
@@ -155,7 +154,7 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50, tip_dist=50,
             else:
                 at_done.append(False)
 
-        leafs = leafs[~np.array(at_done, dtype=bool)]
+        leafs = leafs.loc[~np.array(at_done, dtype=bool)]
 
     done_filtered = n_leafs - leafs.shape[0]
 
@@ -176,7 +175,7 @@ def detect_tips(x, psd_dist=10, done_dist=50, checked_dist=50, tip_dist=50,
             else:
                 checked.append(False)
 
-        leafs = leafs[~np.array(checked, dtype=bool)]
+        leafs = leafs.loc[~np.array(checked, dtype=bool)]
 
     checked_filtered = n_leafs - leafs.shape[0]
 
