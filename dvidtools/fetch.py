@@ -873,7 +873,7 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
 
     if ret_type.lower() == 'index':
         return voxels
-    elif ret_type.lower == 'coords':
+    elif ret_type.lower() == 'coords':
         return voxels * vsize[scale]
 
     verts, faces = mesh.mesh_from_voxels(voxels,
