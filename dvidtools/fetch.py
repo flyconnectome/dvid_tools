@@ -74,6 +74,8 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
     -------
     SWC :       pandas.DataFrame
                 Only if ``save_to=None``.
+    None
+                If no skeleton found.
 
     Examples
     --------
@@ -474,8 +476,8 @@ def get_body_position(bodyid, server=None, node=None):
 
     s = get_skeleton(bodyid, server=server, node=node, verbose=False)
 
-    if s:
-        s, header = utils.parse_swc_str(s)
+    if isinstance(s, pd.DataFrame) and not s.empty:
+        # Return the root (more likely to be actually within the mesh?)
         return s.loc[0, ['x', 'y', 'z']].values
     else:
         # First get voxels of the coarse neuron
@@ -786,7 +788,7 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
         raise ValueError('Unknown return format "{}"'.format(form))
 
 
-def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
+def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
                ret_type='MESH', bbox=None, server=None, node=None):
     """ Get neuron as mesh.
 
@@ -794,9 +796,9 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
     ----------
     bodyid :    int | str
                 ID of body for which to download mesh.
-    scale :     int | "coarse", optional
+    scale :     int | "COARSE", optional
                 Resolution of sparse volume starting with 0 where each level
-                beyond 0 has 1/2 resolution of previous level. "coarse" will
+                beyond 0 has 1/2 resolution of previous level. "COARSE" will
                 return the volume in block coordinates.
     step_size : int, optional
                 Step size for marching cube algorithm.
@@ -822,7 +824,7 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
     faces :     np.array
     """
 
-    if ret_type.lower() not in ['mesh', 'coords', 'index']:
+    if ret_type.upper() not in ['MESH', 'COORDS', 'INDEX']:
         raise ValueError('"ret_type" must be "MESH", "COORDS" or "INDEX"')
 
     server, node, user = eval_param(server, node)
@@ -832,11 +834,13 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
     # Get voxel sizes based on scale
     info = get_segmentation_info(server, node)['Extended']
 
-    vsize = {'coarse' : info['BlockSize']}
+    vsize = {'COARSE' : info['BlockSize']}
     vsize.update({i: np.array(info['VoxelSize']) * 2**i for i in range(info['MaxDownresLevel'])})
 
     if isinstance(scale, int) and scale > info['MaxDownresLevel']:
         raise ValueError('Scale greater than MaxDownresLevel')
+    elif isinstance(scale, str):
+        scale = scale.upper()
 
     if not isinstance(bbox, type(None)):
         url = '{}/api/node/{}/{}/sparsevol/{}'.format(server, node,
@@ -847,21 +851,21 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
                                                                          int(bbox[3]),
                                                                          int(bbox[4]),
                                                                          int(bbox[5]))
-    elif scale == 'coarse':
+    elif scale == 'COARSE':
         url = '{}/api/node/{}/{}/sparsevol-coarse/{}'.format(server, node,
                                                              config.segmentation,
                                                              bodyid)
-    else:
+    elif isinstance(scale, (int, np.number)):
         url = '{}/api/node/{}/{}/sparsevol/{}?scale={}'.format(server, node,
                                                                config.segmentation,
                                                                bodyid, scale)
+    else:
+        raise TypeError('scale must be "COARSE" or integer, not "{}"'.format(scale))
 
     r = requests.get(url)
     r.raise_for_status()
 
     b = r.content
-
-    return b
 
     if save_to:
         with open(save_to, 'wb') as f:
@@ -871,9 +875,9 @@ def get_neuron(bodyid, scale='coarse', step_size=2, save_to=None,
     # Decode binary format
     header, voxels = decode.decode_sparsevol(b, format='rles')
 
-    if ret_type.lower() == 'index':
+    if ret_type.upper() == 'INDEX':
         return voxels
-    elif ret_type.lower() == 'coords':
+    elif ret_type.upper() == 'COORDS':
         return voxels * vsize[scale]
 
     verts, faces = mesh.mesh_from_voxels(voxels,
