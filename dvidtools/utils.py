@@ -1,6 +1,8 @@
 # This code is part of dvid-tools (https://github.com/flyconnectome/dvid_tools)
 # and is released under GNU GPL3
 
+from . import fetch
+
 import json
 import networkx as nx
 import pandas as pd
@@ -391,4 +393,87 @@ def _snap_to_skeleton(x, pos):
     dist = np.sum((x[['x', 'y', 'z']].values - pos)**2, axis=1)
 
     return x.iloc[np.argmin(dist)].node_id.astype(int)
+
+
+def check_skeleton(bodyid, sample=False, node=None, server=None):
+    """ Test if skeleton is up-to-date.
+
+    This works by getting the distance to the closest mesh voxel and skeleton
+    node for each skeleton node and mesh voxel, respectively. The function
+    returns the difference of the mean between skeleton->mesh and
+    mesh->skeleton distances. A negative difference means the skeleton is
+    missing branches, a positive difference indicates the skeleton having too
+    many branches (e.g. if the mesh has been split).
+
+    For large neurons, this can be costly. Use the ``sample`` parameter to
+    speed up calculations.
+
+    Parameters
+    ----------
+    bodyid :        int | str
+                    ID of body for which to check the skeleton.
+    sample :        float | int | None, optional
+                    Use to restrict number of voxels/nodes used to
+                    compare mesh and skeleton. If float, must be between 0
+                    and 1 and will use random fraction. If int and >1, will
+                    shuffle and cap number of voxels/nodes.
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
+
+    Returns
+    -------
+    float
+                    Difference of the mean between skeleton->mesh and
+                    mesh->skeleton distances. A negative difference means the
+                    skeleton is missing branches, a positive differene
+                    indicates the skeleton having too many branches (e.g. if
+                    the mesh has been split).
+    None
+                    If no skeleton available.
+
+    """
+
+    # Get SWC
+    swc = fetch.get_skeleton(bodyid, node=node, server=server, verbose=False)
+
+    if isinstance(swc, type(None)):
+        return None
+
+    swc_co = swc[['x', 'y', 'z']].values
+
+    # Get mesh
+    mesh = fetch.get_neuron(bodyid, scale='coarse', ret_type='COORDS',
+                            node=node, server=server)
+
+    if sample:
+        if sample < 1 and sample > 0:
+            mesh = mesh[np.random.choice(mesh.shape[0],
+                                         int(mesh.shape[0] * sample),
+                                         replace=False)]
+            swc_co = swc_co[np.random.choice(swc_co.shape[0],
+                                             int(swc_co.shape[0] * sample),
+                                             replace=False)]
+        elif sample > 1:
+            if mesh.shape[0] > sample:
+                mesh = mesh[np.random.choice(mesh.shape[0],
+                                             int(sample),
+                                             replace=False)]
+            if swc_co.shape[0] > sample:
+                swc_co = swc_co[np.random.choice(swc_co.shape[0],
+                                                 int(sample),
+                                                 replace=False)]
+
+    # Get distances
+    dist = cdist(mesh, swc_co)
+
+    # Mesh -> SWC
+    mesh_dist = np.min(dist, axis=1)
+    # SWC -> Mesh
+    swc_dist = np.min(dist, axis=0)
+
+    # Return difference in mean distances
+    return np.mean(swc_dist) - np.mean(mesh_dist)
+
 

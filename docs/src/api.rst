@@ -50,9 +50,10 @@ Utility
 .. autosummary::
     :toctree: _autosummary
 
-    parse_swc_str
+    check_skeleton
     gen_assignments
     heal_skeleton
+    parse_swc_str
     reroot_skeleton
     save_swc
 
