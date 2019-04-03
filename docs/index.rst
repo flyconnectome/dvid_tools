@@ -1,7 +1,8 @@
 DVIDtools
 =========
 
-dvidtools allows you to read and write data from `DVID <https://github.com/janelia-flyem/dvid>`_ servers.
+`dvidtools <https://github.com/flyconnectome/dvid_tools>`_ allows you to read
+and write data from `DVID <https://github.com/janelia-flyem/dvid>`_ servers.
 
 Install
 -------
