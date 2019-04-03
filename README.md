@@ -25,6 +25,7 @@ pip install git+git://github.com/flyconnectome/dvid_tools@master
 - tqdm
 - scipy
 - requests
+- networkx
 
 ## What can `dvidtools` do for you?
 
