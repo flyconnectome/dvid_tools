@@ -22,8 +22,8 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
     step_size : int, optional
                 Step size for marching cube algorithm.
                 Higher values = faster but coarser.
-
     """
+
     # Offset block coordinates by +1.
     # Necessary for marching cube producing watertight meshes.
     # Will compensate for this later

@@ -16,32 +16,32 @@ from scipy.spatial.distance import cdist, pdist, squareform
 from tqdm import tqdm
 
 
-def detect_tips(x, use_clf=False, psd_dist=10, done_dist=50, checked_dist=50,
-                tip_dist=50, pos_filter=None, save_to=None, verbose=True,
-                snap=True, server=None, node=None):
+def detect_tips(x, use_clf=False, psd_dist=False, done_dist=False,
+                checked_dist=50, tip_dist=False, pos_filter=None,
+                save_to=None, verbose=True, snap=True, server=None,
+                node=None):
     """ Detects potential open ends on a given neuron.
 
     In brief, the workflow is as follows:
       1. Extract tips from the neuron's skeleton
-      2. Remove duplicate tips (see ``tip_dist``)
-      3. Snap tip positions back to mesh (see ``snap``)
-      4. Remove tips in vicinity of PSDs (see ``psd_dist``)
-      5. Remove tips close to DONE tags (see ``done_dist``)
-      6. Remove tips close to a previously checked assignment
+      2. Snap tip positions back to mesh (see ``snap``)
+      3. Apply filters (see ``_dist`` parameters)
+      4. Remove tips close to a previously checked assignment
          (see ``checked_dist``)
-      7. Sort tips by radius (see als ``use_clf`` classifier) and return
+      5. (Optionally) Try to prioritize tips (``use_clf``)
+      6. Save to a json file (see ``save_to``) that can be opened in neuTu
 
     Parameters
     ----------
     x :             single body ID
     use_clf :       bool, optional
-                    If True, will use a pretrained classifier to try to predict
-                    whether a tip needs human interaction or not. The returned
-                    list of tips will contain and be ordered by "confidence"
-                    values from -1 (unimportant) to +1 (important). THIS IS
-                    NOT A MAGIC BULLET! If you need to be certain you have
-                    completed a neuron, you will actually have to look at
-                    all tips regardless of confidence!
+                    If True, will use a pre-trained classifier to try to
+                    predict whether a tip needs human interaction or not. The
+                    returned list of tips will contain and be ordered by
+                    "confidence" values from -1 (unimportant) to +1
+                    (important). THIS IS NOT A MAGIC BULLET! If you need to be
+                    certain you have completed a neuron, you will actually
+                    have to look at all tips regardless of confidence!
     psd_dist :      int | None, optional
                     Minimum distance (in raw units) to a postsynaptic density
                     (PSD) for a tip to be considered "done".
@@ -77,19 +77,34 @@ def detect_tips(x, use_clf=False, psd_dist=10, done_dist=50, checked_dist=50,
 
     Examples
     --------
+    The usual setting up:
+
+
     >>> import dvidtools as dt
-    >>> dt.set_param('http://your.server.com:8000', 'node', 'user')
+    >>> dt.set_param('https://your.server.com:8000', 'node', 'user')
+
+    By default, ``detect_tips`` will simply return all end nodes of the
+    skeleton that have not previously been "Set checked" in NeuTu:
+
     >>> # Generate list of tips and save to json file
     >>> tips = dt.detect_tips(883338122, save_to='~/Documents/883338122.json')
+
+    A more advanced example is using a pre-trained classifier to include
+    "confidence" values. These confidence range from -1 to +1 and give some
+    indication whether a tip needs to be extended or not. This requires
+    `sciki-learn <https://scikit-learn.org>`_ to be installed. In a terminal
+    run::
+
+        pip install scikit-learn
+
+    Once scikit-learn is installed, you can run the tip detector with
+    classifier confidences:
+
+    >>> tips = dt.detect_tips(883338122, use_clf=True,
+    ...                      save_to='~/Documents/883338122.json')
+
     """
 
-    # TODOs:
-    # - add some sort of confidence based on (a) distance to next PSD and
-    #   radius --> use our ground truth to calibrate
-    # - add examples
-    # - test: tortuosity, distance to HK, branch length, radius (both at tip and parent branch),
-    #         vector from parent, distance to next tip (strahler?),
-    #         vectorproduct to next closest tip (i.e. is this branch just a continuation of a broken branch)
 
     # Get the skeleton
     n = fetch.get_skeleton(x, save_to=None, server=server, node=node)
