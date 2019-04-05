@@ -39,42 +39,46 @@ def eval_param(server=None, node=None, user=None):
 
 
 def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
-                 server=None, node=None, verbose=True):
+                 check_mutation=True, server=None, node=None,
+                 verbose=True):
     """ Download skeleton as SWC file.
 
     Parameters
     ----------
-    bodyid :    int | str
-                ID(s) of body for which to download skeleton.
-    save_to :   str | None, optional
-                If provided, will save SWC to file. If str must be file or
-                path. Please note that using ``heal`` or ``reroot`` will
-                require the SWC table to be cleaned-up using
-                ``dvidtools.refurbish_table`` before saving to keep it in line
-                with SWC format. This will change node IDs!
-    xform :     function, optional
-                If provided will run this function to transform coordinates
-                before saving/returning the SWC file. Function must accept
-                ``(N, 3)`` numpy array. Nodes that don't transform properly
-                will be removed and disconnected piece will be healed.
-    soma :      array-like | function, optional
-                Use to label ("1")  and reroot to soma node:
-                  - array-like is interpreted as x/y/z position and will be
-                    mapped to the closest node
-                  - ``function`` must accept ``bodyid`` and return x/y/z
-                    array-like
-    heal :      bool, optional
-                If True, will heal fragmented neurons using
-                ``dvidtools.heal_skeleton``.
-    server :    str, optional
-                If not provided, will try reading from global.
-    node :      str, optional
-                If not provided, will try reading from global.
+    bodyid :        int | str
+                    ID(s) of body for which to download skeleton.
+    save_to :       str | None, optional
+                    If provided, will save SWC to file. If str must be file or
+                    path. Please note that using ``heal`` or ``reroot`` will
+                    require the SWC table to be cleaned-up using
+                    ``dvidtools.refurbish_table`` before saving to keep it in
+                    line with SWC format. This will change node IDs!
+    xform :         function, optional
+                    If provided will run this function to transform coordinates
+                    before saving/returning the SWC file. Function must accept
+                    ``(N, 3)`` numpy array. Nodes that don't transform properly
+                    will be removed and disconnected piece will be healed.
+    soma :          array-like | function, optional
+                    Use to label ("1")  and reroot to soma node:
+                      - array-like is interpreted as x/y/z position and will be
+                        mapped to the closest node
+                      - ``function`` must accept ``bodyid`` and return x/y/z
+                        array-like
+    heal :          bool, optional
+                    If True, will heal fragmented neurons using
+                    ``dvidtools.heal_skeleton``.
+    check_mutation : bool, optional
+                    If True, will check if skeleton and body are still in-sync
+                    using the mutation IDs. Will warn if mismatch found.
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
 
     Returns
     -------
     SWC :       pandas.DataFrame
-                Only if ``save_to=None``.
+                Only if ``save_to=None`` else ``True``.
     None
                 If no skeleton found.
 
@@ -107,9 +111,21 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
                              'multiple bodies')
         resp = {x: get_skeleton(x,
                                 save_to=save_to,
+                                check_mutation=check_mutation,
+                                verbose=verbose,
+                                heal=heal,
+                                soma=soma,
+                                xform=xform,
                                 server=server,
                                 node=node) for x in tqdm(bodyid,
                                                          desc='Loading')}
+        # Give summary
+        missing = [str(k) for k, v in resp.items() if isinstance(v, type(None))]
+        print('{}/{} skeletons successfully downloaded.'.format(len(resp) - len(missing),
+                                                                len(resp)))
+        if missing:
+            print('Missing skeletons for: {}'.format(','.join(missing)))
+
         if not save_to:
             return resp
         else:
@@ -133,6 +149,17 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
 
     # Parse SWC string
     df, header = utils.parse_swc_str(r.text)
+
+    if check_mutation:
+        if not 'mutation id' in header:
+            print('{} - Unable to check mutation: mutation ID not in SWC header'.format(bodyid))
+        else:
+            swc_mut = int(re.search('"mutation id": (.*?)}', header).group(1))
+            body_mut = get_last_mod(bodyid,
+                                    server=server,
+                                    node=node).get('mutation id')
+            if swc_mut != body_mut:
+                print('{} - skeleton and mesh out of sync: mutation IDs do not match'.format(bodyid))
 
     # Heal first as this might change node IDs
     if heal:
@@ -189,6 +216,7 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
 
         # Save SWC file
         utils.save_swc(df, filename=save_to, header=header)
+        return True
     else:
         return df
 
