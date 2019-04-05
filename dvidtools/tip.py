@@ -105,9 +105,14 @@ def detect_tips(x, use_clf=False, psd_dist=False, done_dist=False,
 
     """
 
+    server, node, user = fetch.eval_param(server, node)
 
     # Get the skeleton
     n = fetch.get_skeleton(x, save_to=None, server=server, node=node)
+
+    if isinstance(n, type(None)):
+        raise ValueError('{} appears to not have a skeleton. Please double'
+                         ' check the body ID.')
 
     # Find leaf and root nodes
     leafs = n[(~n.node_id.isin(n.parent_id.values)) | (n.parent_id <= 0)].copy()
@@ -216,8 +221,8 @@ def detect_tips(x, use_clf=False, psd_dist=False, done_dist=False,
             import sklearn
             from sklearn.externals import joblib
         except:
-            print('Must have scikit-learn library installed. Skipping '
-                  'classification')
+            print('Must have scikit-learn (https://scikit-learn.org) library '
+                  'installed. Skipping classification.')
             sklearn = None
 
     if use_clf and sklearn:
@@ -275,11 +280,14 @@ def detect_tips(x, use_clf=False, psd_dist=False, done_dist=False,
                 'date': dt.date.today().isoformat(),
                 'url': 'https://github.com/flyconnectome/dvid_tools',
                 'parameters' : {'psd_dist': psd_dist,
-                                'done_dost': done_dist,
+                                'done_dist': done_dist,
                                 'checked_dist': checked_dist,
                                 'snap': snap,
                                 'tip_dist': tip_dist,
                                 'node': node,
+                                'use_clf': use_clf,
+                                'pos_filter': not isinstance(pos_filter, (type(None), bool)),
+                                'swc_mutation_id':  getattr(n, 'mutation_id', 'NA'),
                                 'server': server}}
         _ = utils.gen_assignments(leafs, save_to=save_to, meta=meta)
 

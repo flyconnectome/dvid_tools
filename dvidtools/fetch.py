@@ -150,16 +150,18 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
     # Parse SWC string
     df, header = utils.parse_swc_str(r.text)
 
+    if 'mutation id' in header:
+        df.mutation_id = int(re.search('"mutation id": (.*?)}', header).group(1))
+
     if check_mutation:
-        if not 'mutation id' in header:
+        if not getattr(df, 'mutation_id', None):
             print('{} - Unable to check mutation: mutation ID not in SWC header'.format(bodyid))
         else:
-            swc_mut = int(re.search('"mutation id": (.*?)}', header).group(1))
             body_mut = get_last_mod(bodyid,
                                     server=server,
                                     node=node).get('mutation id')
-            if swc_mut != body_mut:
-                print('{} - skeleton and mesh out of sync: mutation IDs do not match'.format(bodyid))
+            if df.mutation_id != body_mut:
+                print("{}: mutation IDs of skeleton and mesh don't match. The skeleton might not be up-to-date.".format(bodyid))
 
     # Heal first as this might change node IDs
     if heal:
