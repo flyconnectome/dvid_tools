@@ -7,6 +7,7 @@ import json
 import networkx as nx
 import pandas as pd
 import numpy as np
+import re
 
 from io import StringIO
 from itertools import combinations
@@ -267,15 +268,26 @@ def parse_swc_str(x):
     pandas.DataFrame, header
 
     """
+    def split_iter(string):
+        # Returns iterator for line split -> memory efficient
+        # Attention: this will not fetch the last line!
+        return (x.group(0) for x in re.finditer('.*?\n', string))
 
     if not isinstance(x, str):
         raise TypeError('x must be str, got "{}"'.format(type(x)))
 
-    # Extract header
-    header = [l for l in x.split('\n') if l.startswith('#')]
+    # Extract header using a generator -> this way we don't have to iterate
+    # over all lines
+    lines = split_iter(x)
+    header = []
+    for l in lines:
+        if l.startswith('#'):
+            header.append(l)
+        else:
+            break
 
     # Turn header back into string
-    header = '\n'.join(header)
+    header = ''.join(header)
 
     # Turn SWC into a DataFrame
     f = StringIO(x)
