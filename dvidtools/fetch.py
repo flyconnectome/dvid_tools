@@ -8,6 +8,7 @@ from . import config
 
 import inspect
 import os
+import re
 import requests
 import warnings
 
@@ -1363,3 +1364,102 @@ def snap_to_body(bodyid, positions, server=None, node=None):
     positions[mask] = np.vstack(snapped)
 
     return positions
+
+
+def get_last_mod(bodyid, server=None, node=None):
+    """ Fetches details on the last modification to given body.
+
+    Parameters
+    ----------
+    bodyid :    body ID
+                Body for which to find positions.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    dict
+                {'mutation id': int,
+                 'last mod user': str,
+                 'last mod app': str,
+                 'last mod time': timestamp isoformat str}
+    """
+
+    # Parse body ID
+    bodyid = utils.parse_bid(bodyid)
+
+    server, node, user = eval_param(server, node)
+
+    r = requests.get('{}/api/node/{}/{}/lastmod/{}'.format(server,
+                                                           node,
+                                                           config.segmentation,
+                                                           bodyid))
+    r.raise_for_status()
+
+    return r.json()
+
+
+def get_skeleton_mutation(bodyid, server=None, node=None):
+    """ Fetches mutation ID of given body.
+
+    Parameters
+    ----------
+    bodyid :        int | str
+                    ID(s) of body for which to download skeleton.
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
+
+    Returns
+    -------
+    int
+                    Mutation ID. Returns ``None`` if no skeleton available.
+
+    """
+
+    if isinstance(bodyid, (list, np.ndarray)):
+        resp = {x: get_skeleton_mutation(x,
+                                         server=server,
+                                         node=node) for x in tqdm(bodyid,
+                                                         desc='Loading')}
+        return resp
+
+    def split_iter(string):
+        # Returns iterator for line split -> memory efficient
+        # Attention: this will not fetch the last line!
+        return (x.group(0) for x in re.finditer('.*?\n', string))
+
+    bodyid = utils.parse_bid(bodyid)
+
+    server, node, user = eval_param(server, node)
+
+    r = requests.get('{}/api/node/{}/{}_skeletons/key/{}_swc'.format(server,
+                                                                     node,
+                                                                     config.segmentation,
+                                                                     bodyid))
+
+    if 'not found' in r.text:
+        print(r.text)
+        return None
+
+    # Extract header using a generator -> this way we don't have to iterate
+    # over all lines
+    lines = split_iter(r.text)
+    header = []
+    for l in lines:
+        if l.startswith('#'):
+            header.append(l)
+        else:
+            break
+    # Turn header back into string
+    header = '\n'.join(header)
+
+    if not 'mutation id' in header:
+        print('{} - Unable to check mutation: mutation ID not in SWC header'.format(bodyid))
+    else:
+        swc_mut = re.search('"mutation id": (.*?)}', header).group(1)
+        return int(swc_mut)
+

@@ -23,6 +23,7 @@ Reading/Writing Data
     get_connections
     get_connectivity
     get_labels_in_area
+    get_last_mod
     get_multiple_bodyids
     get_n_synapses
     get_neuron
