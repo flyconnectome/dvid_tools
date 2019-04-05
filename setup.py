@@ -45,5 +45,7 @@ setup(
     ],
     install_requires=requirements,
     python_requires='>=3.5',
+    extras_require={'extras': ['sklearn==0.20.3']},
+    include_package_data=True,
     zip_safe=False
 )
