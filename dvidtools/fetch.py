@@ -38,9 +38,9 @@ def eval_param(server=None, node=None, user=None):
     return [parsed[n] for n in ['server', 'node', 'user']]
 
 
-def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
-                 check_mutation=True, server=None, node=None,
-                 verbose=True):
+def get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
+                 heal=False, check_mutation=True, server=None, node=None,
+                 verbose=True, **kwargs):
     """ Download skeleton as SWC file.
 
     Parameters
@@ -59,11 +59,18 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
                     ``(N, 3)`` numpy array. Nodes that don't transform properly
                     will be removed and disconnected piece will be healed.
     soma :          array-like | function, optional
-                    Use to label ("1")  and reroot to soma node:
+                    Use to label ("1") and reroot to soma node:
                       - array-like is interpreted as x/y/z position and will be
                         mapped to the closest node
                       - ``function`` must accept ``bodyid`` and return x/y/z
                         array-like
+    root :          array-like | function, optional
+                    Use to reroot the neuron to given node:
+                      - array-like is interpreted as x/y/z position and will be
+                        mapped to the closest node
+                      - ``function`` must accept ``bodyid`` and return x/y/z
+                        array-like
+                    This will override ``soma``.
     heal :          bool, optional
                     If True, will heal fragmented neurons using
                     ``dvidtools.heal_skeleton``.
@@ -117,8 +124,9 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
                                 soma=soma,
                                 xform=xform,
                                 server=server,
-                                node=node) for x in tqdm(bodyid,
-                                                         desc='Loading')}
+                                node=node,
+                                **kwargs) for x in tqdm(bodyid,
+                                                        desc='Loading')}
         # Give summary
         missing = [str(k) for k, v in resp.items() if isinstance(v, type(None))]
         print('{}/{} skeletons successfully downloaded.'.format(len(resp) - len(missing),
@@ -147,6 +155,16 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
             print(r.text)
         return None
 
+    # Save raw SWC before making any changes
+    save_raw_to = kwargs.get('save_raw_to', False)
+    if save_raw_to:
+        # Generate proper filename if necessary
+        if os.path.isdir(save_raw_to):
+            save_raw_to = os.path.join(save_raw_to, '{}.swc'.format(bodyid))
+
+        with open(save_raw_to, 'w') as f:
+            f.write(r.text)
+
     # Parse SWC string
     df, header = utils.parse_swc_str(r.text)
 
@@ -171,6 +189,10 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
     if callable(soma):
         soma = soma(bodyid)
 
+    # If root is function, call it
+    if callable(root):
+        root = root(bodyid)
+
     # If we have a soma
     if isinstance(soma, (list, tuple, np.ndarray)):
         # Get soma node
@@ -181,6 +203,18 @@ def get_skeleton(bodyid, save_to=None, xform=None, soma=None, heal=False,
 
         # Reroot
         utils.reroot_skeleton(df, soma_node, inplace=True)
+
+        # If root is not explicitly provided, reroot to soma
+        if not isinstance(root, (list, tuple, np.ndarray)):
+            root = soma
+
+    # If we have a root
+    if isinstance(root, (list, tuple, np.ndarray)):
+        # Get soma node
+        root_node = utils._snap_to_skeleton(df, root)
+
+        # Reroot
+        utils.reroot_skeleton(df, root_node, inplace=True)
 
     if callable(xform):
         # Add xform function to header for documentation
