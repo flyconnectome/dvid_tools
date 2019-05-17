@@ -173,13 +173,15 @@ def get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
 
     if check_mutation:
         if not getattr(df, 'mutation_id', None):
-            print('{} - Unable to check mutation: mutation ID not in SWC header'.format(bodyid))
+            print('{} - Unable to check mutation: mutation ID not in '
+                  'SWC header'.format(bodyid))
         else:
             body_mut = get_last_mod(bodyid,
                                     server=server,
                                     node=node).get('mutation id')
             if df.mutation_id != body_mut:
-                print("{}: mutation IDs of skeleton and mesh don't match. The skeleton might not be up-to-date.".format(bodyid))
+                print("{}: mutation IDs of skeleton and mesh don't match. "
+                      "The skeleton might not be up-to-date.".format(bodyid))
 
     # Heal first as this might change node IDs
     if heal:
@@ -200,9 +202,6 @@ def get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
 
         # Set label
         df.loc[df.node_id == soma_node, 'label'] = 1
-
-        # Reroot
-        utils.reroot_skeleton(df, soma_node, inplace=True)
 
         # If root is not explicitly provided, reroot to soma
         if not isinstance(root, (list, tuple, np.ndarray)):
@@ -243,7 +242,7 @@ def get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
 
     if save_to:
         # Make sure table is still conform with SWC format
-        if heal or not isinstance(soma, type(None)):
+        if heal or not isinstance(root, type(None)):
             df = utils.refurbish_table(df)
 
         # Generate proper filename if necessary
