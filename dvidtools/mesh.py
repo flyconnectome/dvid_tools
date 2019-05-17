@@ -24,13 +24,11 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
                 Higher values = faster but coarser.
     """
 
-    # Offset block coordinates by +1.
-    # Necessary for marching cube producing watertight meshes.
-    # Will compensate for this later
-    voxels += 1
-
     # Turn voxels into matrix
     mat = _voxels_to_matrix(voxels)
+
+    # Add border to matrix - otherwise marching cube generates holes
+    mat = np.pad(mat, pad_width=5, mode='constant', constant_values=0)
 
     # Use marching cubes to create surface model
     verts, faces, normals, values = marching_cubes_lewiner(mat,
@@ -40,8 +38,8 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
                                                            gradient_direction='ascent',
                                                            spacing=v_size)
 
-    # Compensate for earlier voxel offset
-    verts -= np.array(v_size)
+    # Compensate for earlier padding offset
+    verts -= np.array(v_size) * 5
 
     return verts, faces
 
@@ -134,11 +132,11 @@ def _voxels_to_matrix(voxels, fill=False):
 
     #Populate matrix
     if voxels.shape[1] == 4:
-        mat = np.zeros((voxels.max(axis=0) + 2)[[-1, 1, 0]], dtype=np.bool)
+        mat = np.zeros((voxels.max(axis=0) + 1)[[-1, 1, 0]], dtype=np.bool)
         for col in voxels:
-            mat[col[2]:col[3]+1, col[1], col[0]] = 1
+            mat[col[2]:col[3] + 1, col[1], col[0]] = 1
     elif voxels.shape[1] == 3:
-        mat = np.zeros((voxels.max(axis=0) + 2), dtype=np.bool)
+        mat = np.zeros((voxels.max(axis=0) + 1), dtype=np.bool)
         mat[voxels[:, 0], voxels[:, 1], voxels[:, 2]] = 1
     else:
         raise ValueError('Unexpected voxel shape')
