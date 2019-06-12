@@ -238,7 +238,7 @@ def get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
             # Heal fragments
             utils.heal_skeleton(df, root=root, inplace=True)
     elif not isinstance(xform, type(None)):
-        raise TypeError('"xform" must be a function, not "{}"'.format(type(x)))
+        raise TypeError('"xform" must be a function, not "{}"'.format(type(xform)))
 
     if save_to:
         # Make sure table is still conform with SWC format
