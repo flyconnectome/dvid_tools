@@ -49,7 +49,7 @@ Setting up
 
     # You can pass these parameters explicitly to each function
     # but defining them globally is more convenient
-    server = '127.0.0.1:8000'
+    server = 'http://127.0.0.1:8000'
     node = '54f7'
     user = 'schlegelp'
 
