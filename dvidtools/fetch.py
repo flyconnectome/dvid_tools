@@ -19,7 +19,7 @@ import pandas as pd
 
 from io import StringIO
 from scipy.spatial.distance import cdist
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 DVID_SESSIONS = {}
 DEFAULT_APPNAME = "dvidtools"
@@ -509,36 +509,45 @@ def get_body_id(pos, server=None, node=None):
     return r.json()['Label']
 
 
-def get_multiple_bodyids(pos, server=None, node=None):
+def get_multiple_bodyids(pos, chunk_size=10e3, server=None, node=None):
     """ Get body IDs at given positions.
 
     Parameters
     ----------
-    pos :       iterable
-                [[x1, y1, z1], [x2, y2, z2], ..] positions to query. Must be
-                integers!
-    server :    str, optional
-                If not provided, will try reading from global.
-    node :      str, optional
-                If not provided, will try reading from global.
+    pos :           iterable
+                    [[x1, y1, z1], [x2, y2, z2], ..] positions to query. Must be
+                    integers!
+    chunk_size :    int, optional
+                    Splits query into chunks of a given size to reduce strain on
+                    server.
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
 
     Returns
     -------
-    body_ids :  list
+    body_ids :      list
     """
     server, node, user = eval_param(server, node)
 
     if isinstance(pos, np.ndarray):
         pos = pos.tolist()
 
-    r = dvid_session().get("{}/api/node/{}/{}/labels".format(server,
-                                                             node,
-                                                             config.segmentation),
-                           json=pos)
+    data = []
+    for ix in trange(0, len(pos), chunk_size, desc='Querying positions'):
+        chunk = pos[ix: ix + chunk_size]
 
-    r.raise_for_status()
+        r = dvid_session().get("{}/api/node/{}/{}/labels".format(server,
+                                                                 node,
+                                                                 config.segmentation),
+                               json=chunk)
 
-    return r.json()
+        r.raise_for_status()
+
+        data += r.json()
+
+    return data
 
 
 def get_body_position(bodyid, server=None, node=None):
@@ -1184,10 +1193,7 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
         pos = np.vstack(cn_data.tbar_position.values)
 
         # Get postsynaptic body IDs
-        bodies = dvid_session().get("{}/api/node/{}/{}/labels".format(server,
-                                                                      node,
-                                                                      config.segmentation),
-                                  json=pos.tolist()).json()
+        bodies = get_multiple_bodyids(pos, server=server, node=node)
         cn_data['bodyid_pre'] = bodies
 
         # Filter to sources of interest
@@ -1197,11 +1203,8 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
         # Get positions of PSDs
         pos = np.vstack(cn_data.psd_position.values)
 
-        # Get postsynaptic body IDs
-        bodies = dvid_session().get("{}/api/node/{}/{}/labels".format(server,
-                                                                      node,
-                                                                      config.segmentation),
-                                  json=pos.tolist()).json()
+        # Get presynaptic body IDs
+        bodies = get_multiple_bodyids(pos, server=server, node=node)
         cn_data['bodyid_post'] = bodies
 
         # Filter to targets of interest
@@ -1281,10 +1284,7 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
 
     # Collect positions and query the body IDs of pre-/postsynaptic neurons
     pos = [cn['To'] for s in syn for cn in s['Rels']]
-    bodies = dvid_session().get("{}/api/node/{}/{}/labels".format(server,
-                                                                  node,
-                                                                  config.segmentation),
-                              json=pos).json()
+    bodies = get_multiple_bodyids(pos, server=server, node=node)
 
     # Compile connector table by counting # of synapses between neurons
     connections = {'PreSynTo': {}, 'PostSynTo': {}}
@@ -1410,7 +1410,7 @@ def snap_to_body(bodyid, positions, server=None, node=None):
     bodyid = utils.parse_bid(bodyid)
 
     if isinstance(positions, pd.DataFrame):
-        positions = positions[['x','y','z']].values
+        positions = positions[['x', 'y', 'z']].values
     elif not isinstance(positions, np.ndarray):
         positions = np.array(positions)
 
@@ -1433,7 +1433,7 @@ def snap_to_body(bodyid, positions, server=None, node=None):
     snapped = []
     for v in tqdm(closest, leave=False, desc='Snapping'):
         # Generate a bounding bbox
-        bbox = np.vstack([v,v]).T
+        bbox = np.vstack([v, v]).T
         bbox[:, 1] += 63
 
         fine = get_neuron(bodyid, scale=0, ret_type='INDEX',
@@ -1545,4 +1545,3 @@ def get_skeleton_mutation(bodyid, server=None, node=None):
     else:
         swc_mut = re.search('"mutation id": (.*?)}', header).group(1)
         return int(swc_mut)
-
