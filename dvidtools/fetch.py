@@ -534,8 +534,11 @@ def get_multiple_bodyids(pos, chunk_size=10e3, server=None, node=None):
     if isinstance(pos, np.ndarray):
         pos = pos.tolist()
 
+    # Make sure chunk size is int
+    chunk_size = int(chunk_size)
+
     data = []
-    for ix in trange(0, len(pos), int(chunk_size), desc='Querying positions'):
+    for ix in trange(0, len(pos), chunk_size, desc='Querying positions'):
         chunk = pos[ix: ix + chunk_size]
 
         r = dvid_session().get("{}/api/node/{}/{}/labels".format(server,
