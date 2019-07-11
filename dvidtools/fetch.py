@@ -535,7 +535,7 @@ def get_multiple_bodyids(pos, chunk_size=10e3, server=None, node=None):
         pos = pos.tolist()
 
     data = []
-    for ix in trange(0, len(pos), chunk_size, desc='Querying positions'):
+    for ix in trange(0, len(pos), int(chunk_size), desc='Querying positions'):
         chunk = pos[ix: ix + chunk_size]
 
         r = dvid_session().get("{}/api/node/{}/{}/labels".format(server,
