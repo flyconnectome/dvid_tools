@@ -57,8 +57,8 @@ def detect_tips(x, use_clf=False, psd_dist=False, done_dist=False,
                     will be considered duplicates and one of them will be
                     dropped.
     pos_filter :    function, optional
-                    Function to tips by position. Must accept
-                    numpy array (N, 3) and return array of [True, False, ...]
+                    Function to filter tips by position. Must accept
+                    numpy array (N, 3) and return array of [True, False, ...].
     save_to :       filepath, optional
                     If provided will save open ends to JSON file that can be
                     imported as assigmnents.
