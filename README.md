@@ -3,10 +3,10 @@
 # dvidtools
 Python tools to fetch data from [DVID](https://github.com/janelia-flyem/dvid) servers.
 
-Find the documentation [here](https://dvidtools.readthedocs.io)
+Find the documentation [here](https://dvidtools.readthedocs.io).
 
-If you want to query a neuPrint server, check out [neuprint-python](https://github.com/schlegelp/neuprint-python)
-instead.
+Want to query a neuPrint server instead? Check out
+[neuprint-python](https://github.com/connectome-neuprint/neuprint-python) instead.
 
 ## What can `dvidtools` do for you?
 
@@ -22,7 +22,7 @@ instead.
 
 ## Install
 
-Make sure you have [Python 3](https://www.python.org),
+Make sure you have [Python 3](https://www.python.org) (3.6 or later),
 [pip](https://pip.pypa.io/en/stable/installing/) and
 [git](https://git-scm.com) installed. Then run this in terminal:
 

@@ -11,11 +11,13 @@ import re
 
 from io import StringIO
 from itertools import combinations
-from scipy.spatial.distance import pdist, cdist, squareform
+from scipy.spatial.distance import pdist, cdist
+
+__all__ = ['check_skeleton', 'gen_assignments']
 
 
 def swc_to_graph(x):
-    """ NetworkX DiGraph from SWC DataFrame.
+    """Generate NetworkX DiGraph from SWC DataFrame.
 
     Parameters
     ----------
@@ -25,15 +27,15 @@ def swc_to_graph(x):
     Returns
     -------
     networkx.DiGraph
-    """
 
+    """
     if not isinstance(x, pd.DataFrame):
         raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
 
     edges = x.loc[x.parent_id > 0, ['node_id', 'parent_id']].values.astype(object)
 
-    nlocs =  x.set_index('node_id').loc[edges[:, 0],['x','y','z']].values
-    plocs = x.set_index('node_id').loc[edges[:, 1],['x','y','z']].values
+    nlocs = x.set_index('node_id').loc[edges[:, 0], ['x', 'y', 'z']].values
+    plocs = x.set_index('node_id').loc[edges[:, 1], ['x', 'y', 'z']].values
 
     weights = np.sqrt(np.sum((nlocs - plocs)**2, axis=1))
 
@@ -57,7 +59,7 @@ def swc_to_graph(x):
 
 
 def reroot_skeleton(x, new_root, inplace=False):
-    """ Reroots skeleton to new root.
+    """Reroot skeleton to new root.
 
     For fragmented skeletons, only the root within the new_root's connected
     component will be changed.
@@ -77,7 +79,6 @@ def reroot_skeleton(x, new_root, inplace=False):
     SWC:        pandas.DataFrame
 
     """
-
     if not isinstance(x, pd.DataFrame):
         raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
 
@@ -107,8 +108,9 @@ def reroot_skeleton(x, new_root, inplace=False):
 
 
 def heal_skeleton(x, root=None, inplace=False):
-    """ Merges fragmented skeleton using minimum spanning tree to connect
-    disconnected components.
+    """Merge fragmented skeleton back together.
+
+    Uses a minimum spanning tree to connect disconnected components.
 
     Important
     ---------
@@ -125,8 +127,8 @@ def heal_skeleton(x, root=None, inplace=False):
     Returns
     -------
     SWC:        pandas.DataFrame
-    """
 
+    """
     if not isinstance(x, pd.DataFrame):
         raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
 
@@ -143,7 +145,7 @@ def heal_skeleton(x, root=None, inplace=False):
 
     # Calculate distance between all leafs
     leafs = x[~x.node_id.isin(x.parent_id) | (x.parent_id < 0)]
-    d = pdist(leafs[['x','y','z']].values)
+    d = pdist(leafs[['x', 'y', 'z']].values)
 
     # Generate new edges
     edges = np.array(list(combinations(leafs.node_id.values, 2)))
@@ -164,7 +166,7 @@ def heal_skeleton(x, root=None, inplace=False):
     swc = x.copy() if not inplace else x
 
     # Map new parents
-    lop = {n : next(tree.successors(n)) for n in tree if tree.out_degree(n)}
+    lop = {n: next(tree.successors(n)) for n in tree if tree.out_degree(n)}
     swc['parent_id'] = swc.node_id.map(lambda x: lop.get(x, -1))
 
     # Make sure parent IDs are in ascending order (according to SWC standard)
@@ -181,7 +183,7 @@ def heal_skeleton(x, root=None, inplace=False):
 
 
 def refurbish_table(x, inplace=False):
-    """ Refurbishes SWC table to keep in conform with official format.
+    """Refurbishes SWC table to keep in conform with official format.
 
     Important
     ---------
@@ -197,7 +199,6 @@ def refurbish_table(x, inplace=False):
     SWC:        pandas.DataFrame
 
     """
-
     if not isinstance(x, pd.DataFrame):
         raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
 
@@ -217,7 +218,7 @@ def refurbish_table(x, inplace=False):
 
 
 def verify_payload(data, required, required_only=True):
-    """ Verifies payload.
+    """Verify payload.
 
     Parameters
     ----------
@@ -230,8 +231,8 @@ def verify_payload(data, required, required_only=True):
     Returns
     -------
     None
-    """
 
+    """
     if not isinstance(data, list) or any([not isinstance(d, dict) for d in data]):
         raise TypeError('Data must be list of dicts.)')
 
@@ -257,7 +258,7 @@ def verify_payload(data, required, required_only=True):
 
 
 def parse_swc_str(x):
-    """ Parse SWC string into a pandas DataFrame.
+    """Parse SWC string into a pandas DataFrame.
 
     Parameters
     ----------
@@ -299,7 +300,7 @@ def parse_swc_str(x):
 
 
 def save_swc(x, filename, header=''):
-    """ Save SWC DataFrame to file.
+    """Save SWC DataFrame to file.
 
     Parameters
     ----------
@@ -309,6 +310,7 @@ def save_swc(x, filename, header=''):
     header :    str, optional
                 Header to add in front of SWC table. Each line must begin
                 with "#"!
+
     """
     if not isinstance(x, pd.DataFrame):
         raise TypeError('Expected DataFrame, got "{}"'.format(type(x)))
@@ -331,7 +333,7 @@ def save_swc(x, filename, header=''):
 
 
 def gen_assignments(x, save_to=None, meta={}):
-    """ Generates JSON file that can be imported into neutu as assignments.
+    """Generate JSON file that can be imported into neutu as assignments.
 
     Parameters
     ----------
@@ -347,16 +349,16 @@ def gen_assignments(x, save_to=None, meta={}):
     -------
     JSON-formated string
                 Only if ``save_to=None``.
-    """
 
+    """
     if not isinstance(x, pd.DataFrame):
         raise TypeError('x must be pandas DataFrame, got "{}"'.format(type(x)))
 
     if 'location' not in x.columns:
-        if any([c not in  x.columns for c in ['x', 'y', 'z']]):
+        if any([c not in x.columns for c in ['x', 'y', 'z']]):
             raise ValueError('x must have "location" column or "x", "y" '
                              'and "z" columns')
-        x['location'] = x[['x','y','z']].astype(int).apply(list, axis=1)
+        x['location'] = x[['x', 'y', 'z']].astype(int).apply(list, axis=1)
 
     for c in ['body ID', 'text', 'comment']:
         if c not in x.columns:
@@ -375,14 +377,15 @@ def gen_assignments(x, save_to=None, meta={}):
 
 
 def parse_bid(x):
+    """Force body ID to integer."""
     try:
         return int(x)
-    except:
+    except BaseException:
         raise ValueError('Unable to coerce "{}" into numeric body ID'.format(x))
 
 
 def _snap_to_skeleton(x, pos):
-    """ Snaps position to closest node.
+    """Snap position to closest node.
 
     Parameters
     ----------
@@ -394,8 +397,8 @@ def _snap_to_skeleton(x, pos):
     Returns
     -------
     node ID :       int
-    """
 
+    """
     if not isinstance(x, pd.DataFrame):
         raise TypeError('x must be pandas DataFrame, got "{}"'.format(type(x)))
 
@@ -408,7 +411,7 @@ def _snap_to_skeleton(x, pos):
 
 
 def check_skeleton(bodyid, sample=False, node=None, server=None):
-    """ Test if skeleton is up-to-date.
+    """Test if skeleton is up-to-date.
 
     This works by getting the distance to the closest mesh voxel and skeleton
     node for each skeleton node and mesh voxel, respectively. The function
@@ -446,7 +449,6 @@ def check_skeleton(bodyid, sample=False, node=None, server=None):
                     If no skeleton available.
 
     """
-
     # Get SWC
     swc = fetch.get_skeleton(bodyid, node=node, server=server, verbose=False)
 
@@ -487,5 +489,3 @@ def check_skeleton(bodyid, sample=False, node=None, server=None):
 
     # Return difference in mean distances
     return np.mean(swc_dist) - np.mean(mesh_dist)
-
-

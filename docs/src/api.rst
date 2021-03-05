@@ -6,7 +6,7 @@ API Reference
 Reading/Writing Data
 ++++++++++++++++++++
 
-.. currentmodule:: dvidtools.fetch
+.. currentmodule:: dvid.fetch
 
 .. autosummary::
     :toctree: _autosummary
@@ -24,19 +24,20 @@ Reading/Writing Data
     get_connectivity
     get_labels_in_area
     get_last_mod
-    get_multiple_bodyids
     get_n_synapses
     get_neuron
     get_roi
     get_segmentation_info
-    get_skeleton
+    get_skeletons
     get_synapses
     get_user_bookmarks
+    setup
+    locs_to_ids
 
 Tools
 +++++
 
-.. currentmodule:: dvidtools.tip
+.. currentmodule:: dvid.tip
 
 .. autosummary::
     :toctree: _autosummary
@@ -46,7 +47,7 @@ Tools
 Utility
 +++++++
 
-.. currentmodule:: dvidtools.utils
+.. currentmodule:: dvid.utils
 
 .. autosummary::
     :toctree: _autosummary
@@ -57,5 +58,3 @@ Utility
     parse_swc_str
     reroot_skeleton
     save_swc
-
-

@@ -2,12 +2,11 @@
 # and is released under GNU GPL3
 
 import struct
-import os
-
 import numpy as np
 
+
 def decode_sparsevol(b, format='rles'):
-    """ Decode sparsevol binary mesh format.
+    """Decode sparsevol binary mesh format.
 
     Parameters
     ----------
@@ -30,7 +29,7 @@ def decode_sparsevol(b, format='rles'):
         # First get the header
         header = {k: v for k, v in zip(['start_byte', 'n_dims', 'run_dims',
                                         'reserved', 'n_blocks', 'n_spans'],
-                                        struct.unpack('bbbbii', b[:12]))}
+                                       struct.unpack('bbbbii', b[:12]))}
         coords = []
         for i in range(header['n_spans']):
             offset = 12 + (i * 16)
@@ -45,4 +44,4 @@ def decode_sparsevol(b, format='rles'):
     elif format == 'blocks':
         raise ValueError('Format "blocks" not yet implemented.')
     else:
-        raise ValueError('Unknown format "{}"'.format(form))
+        raise ValueError('Unknown format "{}"'.format(format))

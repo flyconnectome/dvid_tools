@@ -1,11 +1,6 @@
 # This code is part of dvid-tools (https://github.com/flyconnectome/dvid_tools)
 # and is released under GNU GPL3
 
-from . import decode
-from . import mesh
-from . import utils
-from . import config
-
 import inspect
 import os
 import re
@@ -17,19 +12,42 @@ import threading
 import numpy as np
 import pandas as pd
 
-from io import StringIO
 from scipy.spatial.distance import cdist
 from tqdm import tqdm, trange
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from . import decode
+from . import mesh
+from . import utils
+from . import config
+
+# See if navis is available
+try:
+    import navis
+except ImportError:
+    navis = None
+except BaseException:
+    raise
 
 DVID_SESSIONS = {}
 DEFAULT_APPNAME = "dvidtools"
 
+
+__all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation',
+           'get_assignment_status', 'get_available_rois',
+           'get_body_position', 'get_body_profile', 'get_connections',
+           'get_connectivity', 'get_labels_in_area', 'get_last_mod',
+           'locs_to_ids', 'get_n_synapses', 'get_neuron', 'get_roi',
+           'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
+           'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body']
+
+
 def dvid_session(appname=DEFAULT_APPNAME, user=getpass.getuser()):
-    """
-    Return a default requests.Session() object that automatically appends the
-    'u' and 'app' query string parameters to every request.
-    The Session object is cached, so this function will return the same Session
-    object if called again from the same thread with the same arguments.
+    """Return a default requests.Session() object.
+
+    Automatically appends the 'u' and 'app' query string parameters to every
+    request. The Session object is cached, so this function will return the same
+    Session object if called again from the same thread with the same arguments.
     """
     # Technically, request sessions are not threadsafe,
     # so we keep one for each thread.
@@ -40,20 +58,32 @@ def dvid_session(appname=DEFAULT_APPNAME, user=getpass.getuser()):
         s = DVID_SESSIONS[(appname, user, thread_id, pid)]
     except KeyError:
         s = requests.Session()
-        s.params = { 'u': user, 'app': appname }
+        s.params = {'u': user, 'app': appname}
         DVID_SESSIONS[(appname, user, thread_id, pid)] = s
 
     return s
 
-def set_param(server=None, node=None, user=None):
-    """ Set default server, node and/or user."""
+
+def setup(server=None, node=None, user=None):
+    """Set default server, node and/or user.
+
+    Parameters
+    ----------
+    server :    str
+                URL to the dvid server.
+    node :      str
+                UUID of the node to query.
+    user :      str
+                User name. Relevant for e.g. bookmarks.
+
+    """
     for p, n in zip([server, node, user], ['server', 'node', 'user']):
         if not isinstance(p, type(None)):
             globals()[n] = p
 
 
 def eval_param(server=None, node=None, user=None):
-    """ Helper to read globally defined settings."""
+    """Parse parameters and fall back to globally defined values."""
     parsed = {}
     for p, n in zip([server, node, user], ['server', 'node', 'user']):
         if isinstance(p, type(None)):
@@ -64,10 +94,188 @@ def eval_param(server=None, node=None, user=None):
     return [parsed[n] for n in ['server', 'node', 'user']]
 
 
-def get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
-                 heal=False, check_mutation=True, server=None, node=None,
-                 verbose=True, **kwargs):
-    """ Download skeleton as SWC file.
+def get_skeletons(x, save_to=None, output='auto', on_error='warn',
+                  check_mutation=False, max_threads=5, progress=True,
+                  server=None, node=None):
+    """Fetch skeleton for given body ID.
+
+    Parameters
+    ----------
+    x :             int | str | list thereof
+                    ID(s) of bodies for which to download skeletons. Also
+                    accepts pandas DataFrames if they have a body ID column.
+    save_to :       str | None, optional
+                    If provided, will save raw SWC to file. If str must be file
+                    or path.
+    output :        "auto" | "navis" | "swc" | None
+                    Determines the output of this function:
+                     - auto = ``navis.TreeNeuron`` if navis is installed else
+                       SWC table as ``pandas.DataFrame``
+                     - navis = ``navis.TreeNeuron`` - raises error if ``navis``
+                       not installed
+                     - swc = SWC table as ``pandas.DataFrame``
+                     - None = no direct output - really only relevant if you
+                       want to only save the SWC to a file
+    on_error :      "warn" | "skip" | "raise"
+                    What to do if fetching a skeleton throws an error. Typically
+                    this is because there is no skeleton for a given body ID
+                    but it could also be a more general connection error.
+    check_mutation : bool, optional
+                    If True, will check if skeleton and body are still in-sync
+                    using the mutation IDs. Will warn if mismatch found.
+    max_threads :   int
+                    Max number of parallel queries to the dvid server.
+    progress :      bool
+                    Whether to show a progress bar or not.
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
+
+    Returns
+    -------
+    SWC :       pandas.DataFrame
+                Only if ``save_to=None`` else ``True``.
+    None
+                If no skeleton found.
+
+    Examples
+    --------
+    Fetch neuron as navis skeleton
+
+    >>> dt.get_skeleton(485775679)
+
+    Grab a neuron and save it directly to a file
+
+    >>> dt.get_skeleton(485775679, save_to='~/Downloads/', output=None)
+
+    """
+    if output == 'navis' and not navis:
+        raise ImportError('Please install `navis`: pip3 install navis')
+
+    if on_error not in ("warn", "skip", "raise"):
+        raise ValueError('`on_error` must be either "warn", "skip" or "raise"')
+
+    if max_threads < 1:
+        raise ValueError('`max_threads` must be >= 1')
+
+    if isinstance(x, pd.DataFrame):
+        if 'bodyId' in x.columns:
+            x = x['bodyId'].values
+        elif 'bodyid' in x.columns:
+            x = x['bodyid'].values
+        else:
+            raise ValueError('DataFrame must have "bodyId" column.')
+    elif isinstance(x, int):
+        x = [x]
+    elif isinstance(x, str):
+        x = [int(x)]
+
+    # At this point we expect a list, set or array
+    if not isinstance(x, (list, set, np.ndarray)):
+        raise TypeError(f'Unexpected data type for body ID(s): "{type(x)}"')
+
+    if len(x) > 1:
+        if save_to and not os.path.isdir(save_to):
+            raise ValueError('"save_to" must be path when loading multiple'
+                             'multiple skeletons')
+
+    out = []
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        futures = {}
+        for bid in x:
+            f = executor.submit(__get_skeleton,
+                                bid,
+                                save_to=save_to,
+                                output=output,
+                                on_error=on_error,
+                                check_mutation=check_mutation,
+                                server=server, node=node)
+            futures[f] = bid
+
+        with tqdm(desc='Fetching',
+                  total=len(x),
+                  leave=False,
+                  disable=not progress) as pbar:
+            for f in as_completed(futures):
+                out.append(f.result())
+                pbar.update(1)
+
+    if (output == 'auto' and navis) or (output == 'navis'):
+        out = navis.NeuronList(out)
+
+    return out
+
+
+def __get_skeleton(bodyid, save_to=None, output='auto', on_error='raise',
+                   check_mutation=False, server=None, node=None):
+    """Load a single skeleton."""
+    bodyid = utils.parse_bid(bodyid)
+
+    server, node, user = eval_param(server, node)
+
+    r = dvid_session().get('{}/api/node/{}/{}_skeletons/key/{}_swc'.format(server,
+                                                                           node,
+                                                                           config.segmentation,
+                                                                           bodyid))
+
+    try:
+        r.raise_for_status()
+    except BaseException:
+        if on_error == 'raise':
+            raise
+        elif on_error == 'warn':
+            warnings.warn(f'{bodyid}: {r.text.strip()}')
+        return
+
+    # Save raw SWC before making any changes
+    if save_to:
+        # Generate proper filename if necessary
+        if os.path.isdir(save_to):
+            save_raw_to = os.path.join(save_to, '{}.swc'.format(bodyid))
+        else:
+            # ... else assume it's a file
+            save_raw_to = save_to
+
+        with open(save_raw_to, 'w') as f:
+            f.write(r.text)
+
+    # Stop here is no further output required
+    if not output:
+        return
+
+    # Parse SWC string
+    swc, header = utils.parse_swc_str(r.text)
+    swc.header = header
+
+    if 'mutation id' in header:
+        swc.mutation_id = int(re.search('"mutation id": (.*?)}', header).group(1))
+
+    if check_mutation:
+        if not getattr(swc, 'mutation_id', None):
+            print('{} - Unable to check mutation: mutation ID not in '
+                  'SWC header'.format(bodyid))
+        else:
+            body_mut = get_last_mod(bodyid,
+                                    server=server,
+                                    node=node).get('mutation id')
+            if swc.mutation_id != body_mut:
+                print("{}: mutation IDs of skeleton and mesh don't match. "
+                      "The skeleton might not be up-to-date.".format(bodyid))
+
+    if (output == 'auto' and navis) or (output == 'navis'):
+        n = navis.TreeNeuron(swc, id=bodyid)
+        n.header = header
+        n.mutation_id = getattr(swc, 'mutation_id', None)
+        return n
+
+    return swc
+
+
+def __old_get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
+                       heal=False, check_mutation=True, server=None, node=None,
+                       verbose=True, **kwargs):
+    """Download skeleton as SWC file.
 
     Parameters
     ----------
@@ -121,28 +329,12 @@ def get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
 
     >>> dt.get_skeleton(485775679, save_to='~/Downloads/')
 
-    Grab a neuron and transform to FAFB space before saving to
-    file. This requires `navis <https://navis.readthedocs.io>`_
-    and ``rpy2`` to be installed.
-
-    >>> from navis.interfaces import r
-    >>> from rpy2.robjects.packages import importr
-    >>> importr('nat.jrcfibf')
-    >>> dvidtools.get_skeleton(485775679,
-    ...                        save_to='~/Downloads/',
-    ...                        xform=lambda x: r.xform_brain(x,
-    ...                                                      source='JRCFIB2018Fraw',
-    ...                                                      target='FAFB14')
-    ...                       )
-
-
     """
-
     if isinstance(bodyid, (list, np.ndarray)):
         if save_to and not os.path.isdir(save_to):
             raise ValueError('"save_to" must be path when loading multiple'
                              'multiple bodies')
-        resp = {x: get_skeleton(x,
+        resp = {x: __old_get_skeleton(x,
                                 save_to=save_to,
                                 check_mutation=check_mutation,
                                 verbose=verbose,
@@ -284,7 +476,7 @@ def get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
 
 def get_user_bookmarks(server=None, node=None, user=None,
                        return_dataframe=True):
-    """ Get user bookmarks.
+    """Get user bookmarks.
 
     Parameters
     ----------
@@ -317,7 +509,7 @@ def get_user_bookmarks(server=None, node=None, user=None,
 
 
 def add_bookmarks(data, verify=True, server=None, node=None):
-    """ Add or edit user bookmarks.
+    """Add or edit user bookmarks.
 
     Please note that you will have to restart neutu to see the changes to
     your user bookmarks.
@@ -361,9 +553,9 @@ def add_bookmarks(data, verify=True, server=None, node=None):
 
     if verify:
         required = {'Pos': list, 'Kind': str, 'Tags': [str],
-                'Prop': {'body ID': str, 'comment': str, 'custom': str,
-                         'status': str, 'time': str, 'type': str,
-                         'user': str}}
+                    'Prop': {'body ID': str, 'comment': str, 'custom': str,
+                             'status': str, 'time': str, 'type': str,
+                             'user': str}}
 
         utils.verify_payload(data, required=required, required_only=True)
 
@@ -376,7 +568,7 @@ def add_bookmarks(data, verify=True, server=None, node=None):
 
 
 def get_annotation(bodyid, server=None, node=None, verbose=True):
-    """ Fetch annotations for given body.
+    """Fetch annotations for given body.
 
     Parameters
     ----------
@@ -392,6 +584,7 @@ def get_annotation(bodyid, server=None, node=None, verbose=True):
     Returns
     -------
     annotations :   dict
+
     """
     server, node, user = eval_param(server, node)
 
@@ -402,14 +595,14 @@ def get_annotation(bodyid, server=None, node=None, verbose=True):
 
     try:
         return r.json()
-    except:
+    except BaseException:
         if verbose:
             print(r.text)
         return {}
 
 
 def edit_annotation(bodyid, annotation, server=None, node=None, verbose=True):
-    """ Edit annotations for given body.
+    """Edit annotations for given body.
 
     Parameters
     ----------
@@ -450,8 +643,8 @@ def edit_annotation(bodyid, annotation, server=None, node=None, verbose=True):
     >>> an['name'] = 'New Name'
     >>> # Update annotation
     >>> dvidtools.edit_annotation('1700937093', an)
-    """
 
+    """
     if not isinstance(annotation, dict):
         raise TypeError('Annotation must be dictionary, not "{}"'.format(type(annotation)))
 
@@ -475,7 +668,7 @@ def edit_annotation(bodyid, annotation, server=None, node=None, verbose=True):
                                                                           node,
                                                                           config.body_labels,
                                                                           bodyid),
-                      json=old_an)
+                            json=old_an)
 
     # Check if it worked
     r.raise_for_status()
@@ -483,8 +676,8 @@ def edit_annotation(bodyid, annotation, server=None, node=None, verbose=True):
     return None
 
 
-def get_body_id(pos, server=None, node=None):
-    """ Get body ID at given position.
+def __old_get_body_id(pos, server=None, node=None):
+    """Get body ID at given position.
 
     Parameters
     ----------
@@ -498,6 +691,7 @@ def get_body_id(pos, server=None, node=None):
     Returns
     -------
     body_id :   str
+
     """
     server, node, user = eval_param(server, node)
 
@@ -509,17 +703,19 @@ def get_body_id(pos, server=None, node=None):
     return r.json()['Label']
 
 
-def get_multiple_bodyids(pos, chunk_size=10e3, server=None, node=None):
-    """ Get body IDs at given positions.
+def locs_to_ids(pos, chunk_size=10e3, progress=True, server=None, node=None):
+    """Get body IDs at given positions.
 
     Parameters
     ----------
     pos :           iterable
-                    [[x1, y1, z1], [x2, y2, z2], ..] positions to query. Must be
-                    integers!
+                    [[x1, y1, z1], [x2, y2, z2], ..] positions in voxel space.
+                    Must be integers!
     chunk_size :    int, optional
                     Splits query into chunks of a given size to reduce strain on
                     server.
+    progress :      bool
+                    If True, show progress bar.
     server :        str, optional
                     If not provided, will try reading from global.
     node :          str, optional
@@ -528,23 +724,31 @@ def get_multiple_bodyids(pos, chunk_size=10e3, server=None, node=None):
     Returns
     -------
     body_ids :      list
+
     """
     server, node, user = eval_param(server, node)
 
-    if isinstance(pos, np.ndarray):
-        pos = pos.tolist()
+    pos = np.asarray(pos)
 
-    # Make sure chunk size is int
-    chunk_size = int(chunk_size)
+    if pos.ndim == 1:
+        pos.reshape(1, 3)
+
+    if pos.ndim != 2 or pos.shape[1] != 3:
+        raise ValueError('Expected (N, 3) array of positions, got {}')
+
+    # Make sure we are working on integers
+    pos = pos.astype(int)
 
     data = []
-    for ix in trange(0, len(pos), chunk_size, desc='Querying positions'):
+    for ix in trange(0, len(pos), int(chunk_size),
+                     disable=not progress,
+                     desc='Querying positions'):
         chunk = pos[ix: ix + chunk_size]
 
         r = dvid_session().get("{}/api/node/{}/{}/labels".format(server,
                                                                  node,
                                                                  config.segmentation),
-                               json=chunk)
+                               json=chunk.tolist())
 
         r.raise_for_status()
 
@@ -554,7 +758,7 @@ def get_multiple_bodyids(pos, chunk_size=10e3, server=None, node=None):
 
 
 def get_body_position(bodyid, server=None, node=None):
-    """ Get a single position for given body ID.
+    """Get a single position for given body ID.
 
     This will (like neutu) use the skeleton. If body has no skeleton, will
     use mesh as fallback.
@@ -571,11 +775,11 @@ def get_body_position(bodyid, server=None, node=None):
     Returns
     -------
     (x, y, z)
-    """
 
+    """
     bodyid = utils.parse_bid(bodyid)
 
-    s = get_skeleton(bodyid, server=server, node=node, verbose=False)
+    s = get_skeletons(bodyid, server=server, node=node, verbose=False)
 
     if isinstance(s, pd.DataFrame) and not s.empty:
         # Return the root (more likely to be actually within the mesh?)
@@ -599,7 +803,7 @@ def get_body_position(bodyid, server=None, node=None):
         # Pick a random voxel
         v = voxels[0] * 64
         # Generate a bounding bbox
-        bbox = np.vstack([v,v]).T
+        bbox = np.vstack([v, v]).T
         bbox[:, 1] += 63
 
         voxels = get_neuron(bodyid, scale=0, ret_type='INDEX',
@@ -620,7 +824,7 @@ def get_body_position(bodyid, server=None, node=None):
 
 
 def get_body_profile(bodyid, server=None, node=None):
-    """ Get body profile (n voxels, n blocks, bounding box)
+    """Get body profile (N voxels, N blocks, bounding box).
 
     Parameters
     ----------
@@ -634,6 +838,7 @@ def get_body_profile(bodyid, server=None, node=None):
     Returns
     -------
     profile :   dict
+
     """
     server, node, user = eval_param(server, node)
 
@@ -646,7 +851,7 @@ def get_body_profile(bodyid, server=None, node=None):
 
 
 def get_assignment_status(pos, window=None, bodyid=None, server=None, node=None):
-    """ Returns assignment status at given position.
+    """Return assignment status at given position.
 
     Checking/unchecking assigments leaves invisible "bookmarks" at the given
     position. These can be queried using this endpoint.
@@ -677,7 +882,6 @@ def get_assignment_status(pos, window=None, bodyid=None, server=None, node=None)
                 If ``window!=None`` will return a list of of dicts.
 
     """
-
     server, node, user = eval_param(server, node)
 
     if isinstance(window, (list, np.ndarray, tuple)):
@@ -707,10 +911,10 @@ def get_assignment_status(pos, window=None, bodyid=None, server=None, node=None)
             if not isinstance(bodyid, (list, np.ndarray)):
                 bodyid = [bodyid]
 
-            bids = np.array(get_multiple_bodyids(coords,
-                                                 server=server,
-                                                 node=node
-                                                 ))
+            bids = np.array(locs_to_ids(coords,
+                                        server=server,
+                                        node=node
+                                        ))
 
             coords = coords[np.in1d(bids, bodyid)]
 
@@ -739,7 +943,7 @@ def get_assignment_status(pos, window=None, bodyid=None, server=None, node=None)
 
 
 def get_labels_in_area(offset, size, server=None, node=None):
-    """ Get labels (todo, to split, etc.) in given bounding box.
+    """Get labels (todo, to split, etc.) in given bounding box.
 
     Parameters
     ----------
@@ -755,6 +959,7 @@ def get_labels_in_area(offset, size, server=None, node=None):
     Returns
     -------
     todo tags : pandas.DataFrame
+
     """
     server, node, user = eval_param(server, node)
 
@@ -780,7 +985,7 @@ def get_labels_in_area(offset, size, server=None, node=None):
 
 
 def get_available_rois(server=None, node=None, step_size=2):
-    """ Get a list of all available ROIs in given node.
+    """Get a list of all available ROIs in given node.
 
     Parameters
     ----------
@@ -792,8 +997,8 @@ def get_available_rois(server=None, node=None, step_size=2):
     Returns
     -------
     list
-    """
 
+    """
     server, node, user = eval_param(server, node)
 
     r = dvid_session().get('{}/api/node/{}/rois/keys'.format(server, node))
@@ -805,7 +1010,7 @@ def get_available_rois(server=None, node=None, step_size=2):
 
 def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
             save_to=None, server=None, node=None):
-    """ Get ROI as either mesh, voxels or ``.obj`` file.
+    """Get ROI as either mesh, voxels or ``.obj`` file.
 
     Uses marching cube algorithm to extract surface model of ROI voxels. The
     ``.obj`` files are precomputed on the server.
@@ -845,8 +1050,8 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
                         4 coordinates: ``[z, y, x_start, x_end]``
     OBJ :               str
                         ``.obj`` string. Only if ``save_to=None``.
-    """
 
+    """
     server, node, user = eval_param(server, node)
 
     if form.upper() in ['MESH', 'VOXELS', 'BLOCKS']:
@@ -889,7 +1094,7 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
 
 def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
                ret_type='MESH', bbox=None, server=None, node=None):
-    """ Get neuron as mesh.
+    """Get neuron as mesh.
 
     Parameters
     ----------
@@ -921,8 +1126,8 @@ def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
     verts :     np.array
                 Vertex coordinates in nm.
     faces :     np.array
-    """
 
+    """
     if ret_type.upper() not in ['MESH', 'COORDS', 'INDEX']:
         raise ValueError('"ret_type" must be "MESH", "COORDS" or "INDEX"')
 
@@ -933,7 +1138,7 @@ def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
     # Get voxel sizes based on scale
     info = get_segmentation_info(server, node)['Extended']
 
-    vsize = {'COARSE' : info['BlockSize']}
+    vsize = {'COARSE': info['BlockSize']}
     vsize.update({i: np.array(info['VoxelSize']) * 2**i for i in range(info['MaxDownresLevel'])})
 
     if isinstance(scale, int) and scale > info['MaxDownresLevel']:
@@ -987,7 +1192,7 @@ def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
 
 
 def get_segmentation_info(server=None, node=None):
-    """ Returns segmentation info as dictionary.
+    """Return segmentation info as dictionary.
 
     Parameters
     ----------
@@ -995,8 +1200,8 @@ def get_segmentation_info(server=None, node=None):
                 If not provided, will try reading from global.
     node :      str, optional
                 If not provided, will try reading from global.
-    """
 
+    """
     server, node, user = eval_param(server, node)
 
     r = dvid_session().get('{}/api/node/{}/{}/info'.format(server, node, config.segmentation))
@@ -1005,8 +1210,7 @@ def get_segmentation_info(server=None, node=None):
 
 
 def get_n_synapses(bodyid, server=None, node=None):
-    """ Returns number of pre- and postsynapses associated with given
-    body.
+    """Return number of pre- and postsynapses associated with given body.
 
     Parameters
     ----------
@@ -1021,8 +1225,8 @@ def get_n_synapses(bodyid, server=None, node=None):
     -------
     dict
                 ``{'PreSyn': int, 'PostSyn': int}``
-    """
 
+    """
     server, node, user = eval_param(server, node)
 
     bodyid = utils.parse_bid(bodyid)
@@ -1049,7 +1253,7 @@ def get_n_synapses(bodyid, server=None, node=None):
 
 
 def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=None):
-    """ Returns table of pre- and postsynapses associated with given body.
+    """Return table of pre- and postsynapses associated with given body.
 
     Parameters
     ----------
@@ -1077,8 +1281,8 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
     >>> lh = navis.Volume(*dvidtools.get_roi('LH'))
     >>> lh_syn = dvidtools.get_synapses(329566174,
     ...                                 pos_filter=lambda x: navis.in_volume(x, lh))
-    """
 
+    """
     if isinstance(bodyid, (list, np.ndarray)):
         tables = [get_synapses(b, pos_filter, server, node) for b in tqdm(bodyid,
                                                               desc='Fetching')]
@@ -1107,7 +1311,7 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
 
 
 def get_connections(source, target, pos_filter=None, server=None, node=None):
-    """ Returns list of connections between source(s) and target(s).
+    """Return list of connections between source(s) and target(s).
 
     Parameters
     ----------
@@ -1128,8 +1332,8 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
     pandas.DataFrame
                 DataFrame containing "bodyid_pre", "tbar_position",
                 "tbar_confidence", "psd_position", "bodyid_post".
-    """
 
+    """
     if not isinstance(source, (list, np.ndarray)):
         source = [source]
 
@@ -1162,19 +1366,18 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
         props = list(set([k for s in syn for k in s['Prop'].keys()]))
 
         # Collect downstream connections
-        this_cn = [[s['Pos'],
-                    r['To']] + [s['Prop'].get(p, None) for p in props]
-                    for s in syn if s['Kind'] == query_rel and s['Rels'] for r in s['Rels']]
+        this_cn = [[s['Pos'], r['To']] + [s['Prop'].get(p, None) for p in props]
+                   for s in syn if s['Kind'] == query_rel and s['Rels'] for r in s['Rels']]
 
         df = pd.DataFrame(this_cn)
 
         # Add columns
         if query_rel == 'PreSyn':
-            df.columns=['tbar_position', 'psd_position'] + props
+            df.columns = ['tbar_position', 'psd_position'] + props
             # If we queried sources, we now the identity of presynaptic neuron
             df['bodyid_pre'] = q
         else:
-            df.columns=['psd_position', 'tbar_position'] + props
+            df.columns = ['psd_position', 'tbar_position'] + props
 
         cn_data.append(df)
 
@@ -1196,7 +1399,7 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
         pos = np.vstack(cn_data.tbar_position.values)
 
         # Get postsynaptic body IDs
-        bodies = get_multiple_bodyids(pos, server=server, node=node)
+        bodies = locs_to_ids(pos, server=server, node=node)
         cn_data['bodyid_pre'] = bodies
 
         # Filter to sources of interest
@@ -1207,7 +1410,7 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
         pos = np.vstack(cn_data.psd_position.values)
 
         # Get presynaptic body IDs
-        bodies = get_multiple_bodyids(pos, server=server, node=node)
+        bodies = locs_to_ids(pos, server=server, node=node)
         cn_data['bodyid_post'] = bodies
 
         # Filter to targets of interest
@@ -1218,7 +1421,7 @@ def get_connections(source, target, pos_filter=None, server=None, node=None):
 
 def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
                      server=None, node=None):
-    """ Returns connectivity table for given body.
+    """Return connectivity table for given body.
 
     Parameters
     ----------
@@ -1239,7 +1442,6 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
     pandas.DataFrame
 
     """
-
     if isinstance(bodyid, (list, np.ndarray)):
         bodyid = np.array(bodyid).astype(str)
 
@@ -1250,7 +1452,7 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
         # Concatenate the DataFrames
         conc = []
         for r in ['upstream', 'downstream']:
-            this_r = [d[d.relation==r].set_index('bodyid').drop('relation', axis=1) for d in cn]
+            this_r = [d[d.relation == r].set_index('bodyid').drop('relation', axis=1) for d in cn]
             this_r = pd.concat(this_r, axis=1)
             this_r.columns = bodyid
             this_r['relation'] = r
@@ -1287,7 +1489,7 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
 
     # Collect positions and query the body IDs of pre-/postsynaptic neurons
     pos = [cn['To'] for s in syn for cn in s['Rels']]
-    bodies = get_multiple_bodyids(pos, server=server, node=node)
+    bodies = locs_to_ids(pos, server=server, node=node)
 
     # Compile connector table by counting # of synapses between neurons
     connections = {'PreSynTo': {}, 'PostSynTo': {}}
@@ -1324,7 +1526,7 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
     cn_table.reset_index(drop=True, inplace=True)
 
     if ignore_autapses:
-        to_drop = cn_table.index[cn_table.bodyid==int(bodyid)]
+        to_drop = cn_table.index[cn_table.bodyid == int(bodyid)]
         cn_table = cn_table.drop(index=to_drop).reset_index()
 
     return cn_table[['bodyid', 'relation', 'n_synapses']]
@@ -1332,7 +1534,7 @@ def get_connectivity(bodyid, pos_filter=None, ignore_autapses=True,
 
 def get_adjacency(sources, targets=None, pos_filter=None, ignore_autapses=True,
                   server=None, node=None):
-    """ Get adjacency between sources and targets.
+    """Get adjacency between sources and targets.
 
     Parameters
     ----------
@@ -1352,8 +1554,8 @@ def get_adjacency(sources, targets=None, pos_filter=None, ignore_autapses=True,
     -------
     adjacency matrix :  pandas.DataFrame
                         Sources = rows; targets = columns
-    """
 
+    """
     server, node, user = eval_param(server, node)
 
     if not isinstance(sources, (list, tuple, np.ndarray)):
@@ -1380,7 +1582,7 @@ def get_adjacency(sources, targets=None, pos_filter=None, ignore_autapses=True,
                           server=server, node=node)
 
     # Subset connectivity to source -> target
-    cn = cn[cn.relation==relation].set_index('bodyid')
+    cn = cn[cn.relation == relation].set_index('bodyid')
     cn.index = cn.index.astype(str)
     cn = cn.reindex(index=index, columns=columns, fill_value=0)
 
@@ -1391,7 +1593,7 @@ def get_adjacency(sources, targets=None, pos_filter=None, ignore_autapses=True,
 
 
 def snap_to_body(bodyid, positions, server=None, node=None):
-    """ Snap a set of positions to the closest voxels on a given body.
+    """Snap a set of positions to the closest voxels on a given body.
 
     Parameters
     ----------
@@ -1407,8 +1609,8 @@ def snap_to_body(bodyid, positions, server=None, node=None):
     Returns
     -------
     (x, y, z)
-    """
 
+    """
     # Parse body ID
     bodyid = utils.parse_bid(bodyid)
 
@@ -1420,7 +1622,7 @@ def snap_to_body(bodyid, positions, server=None, node=None):
     positions = positions.astype(int)
 
     # Find those that are not already within the body
-    bids = get_multiple_bodyids(positions, server=server, node=node)
+    bids = locs_to_ids(positions, server=server, node=node)
     mask = np.array(bids) != int(bodyid)
     to_snap = positions[mask]
 
@@ -1453,7 +1655,7 @@ def snap_to_body(bodyid, positions, server=None, node=None):
 
 
 def get_last_mod(bodyid, server=None, node=None):
-    """ Fetches details on the last modification to given body.
+    """Fetch details on the last modification to given body.
 
     Parameters
     ----------
@@ -1471,8 +1673,8 @@ def get_last_mod(bodyid, server=None, node=None):
                  'last mod user': str,
                  'last mod app': str,
                  'last mod time': timestamp isoformat str}
-    """
 
+    """
     # Parse body ID
     bodyid = utils.parse_bid(bodyid)
 
@@ -1488,7 +1690,7 @@ def get_last_mod(bodyid, server=None, node=None):
 
 
 def get_skeleton_mutation(bodyid, server=None, node=None):
-    """ Fetches mutation ID of given body.
+    """Fetch mutation ID of given body.
 
     Parameters
     ----------
@@ -1505,12 +1707,11 @@ def get_skeleton_mutation(bodyid, server=None, node=None):
                     Mutation ID. Returns ``None`` if no skeleton available.
 
     """
-
     if isinstance(bodyid, (list, np.ndarray)):
         resp = {x: get_skeleton_mutation(x,
                                          server=server,
                                          node=node) for x in tqdm(bodyid,
-                                                         desc='Loading')}
+                                                                  desc='Loading')}
         return resp
 
     def split_iter(string):
@@ -1543,7 +1744,7 @@ def get_skeleton_mutation(bodyid, server=None, node=None):
     # Turn header back into string
     header = '\n'.join(header)
 
-    if not 'mutation id' in header:
+    if 'mutation id' not in header:
         print('{} - Unable to check mutation: mutation ID not in SWC header'.format(bodyid))
     else:
         swc_mut = re.search('"mutation id": (.*?)}', header).group(1)

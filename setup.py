@@ -7,7 +7,7 @@ except:
 import re
 
 
-VERSIONFILE = "dvidtools/__init__.py"
+VERSIONFILE = "dvid/__init__.py"
 verstrline = open(VERSIONFILE, "rt").read()
 VSRE = r"^__verstr__ = ['\"]([^'\"]*)['\"]"
 mo = re.search(VSRE, verstrline, re.M)
@@ -23,10 +23,11 @@ with open('requirements.txt') as f:
 setup(
     name='dvidtools',
     version=verstr,
-    packages=['dvidtools'],
+    packages=['dvid'],
     license='GNU GPL V3',
     description='Fetch data from DVID server',
     long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     url='https://github.com/flyconnectome/dvid_tools',
     author='Philipp Schlegel',
     author_email='pms70@cam.ac.uk',
@@ -44,7 +45,7 @@ setup(
         'Programming Language :: Python :: 3.6',
     ],
     install_requires=requirements,
-    python_requires='>=3.5',
+    python_requires='>=3.6',
     extras_require={'extras': ['scikit-learn==0.20.3']},
     include_package_data=True,
     zip_safe=False

@@ -8,7 +8,7 @@ from scipy.ndimage.morphology import binary_erosion, binary_fill_holes
 
 
 def mesh_from_voxels(voxels, v_size, step_size=1):
-    """ Turns voxels into vertices and faces using marching cubes.
+    """Generate mesh from voxels using marching cubes.
 
     Parameters
     ----------
@@ -22,8 +22,13 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
     step_size : int, optional
                 Step size for marching cube algorithm.
                 Higher values = faster but coarser.
-    """
 
+    Returns
+    -------
+    vertices :  (N, 3) numpy array
+    faces :     (N, 3) numpy array
+
+    """
     # Turn voxels into matrix
     mat = _voxels_to_matrix(voxels)
 
@@ -45,12 +50,11 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
 
 
 def remove_surface_voxels(voxels, **kwargs):
-    """Removes surface voxels. """
-
+    """Removes surface voxels."""
     # Use bounding boxes to keep matrix small
     bb_min = voxels.min(axis=0)
-    bb_max = voxels.max(axis=0)
-    dim = bb_max - bb_min
+    #bb_max = voxels.max(axis=0)
+    #dim = bb_max - bb_min
 
     # Voxel offset
     voxel_off = voxels - bb_min
@@ -68,12 +72,11 @@ def remove_surface_voxels(voxels, **kwargs):
 
 
 def get_surface_voxels(voxels):
-    """ Returns surface voxels. """
-
+    """Return surface voxels."""
     # Use bounding boxes to keep matrix small
     bb_min = voxels.min(axis=0)
-    bb_max = voxels.max(axis=0)
-    dim = bb_max - bb_min
+    #bb_max = voxels.max(axis=0)
+    #dim = bb_max - bb_min
 
     # Voxel offset
     voxel_off = voxels - bb_min
@@ -94,15 +97,13 @@ def get_surface_voxels(voxels):
 
 
 def parse_obj(obj):
-    """ Parse .obj string and return vertices and faces.
-    """
-
+    """Parse .obj string and return vertices and faces."""
     lines = obj.split('\n')
     verts = []
     faces = []
     for l in lines:
         if l.startswith('v '):
-            verts.append([float(v) for v in  l[2:].split(' ')])
+            verts.append([float(v) for v in l[2:].split(' ')])
         elif l.startswith('f '):
             f = [v.split('//')[0] for v in l[2:].split(' ')]
             faces.append([int(v) for v in f])
@@ -112,7 +113,7 @@ def parse_obj(obj):
 
 
 def _voxels_to_matrix(voxels, fill=False):
-    """ Generate matrix from voxels/blocks.
+    """Generate matrix from voxels/blocks.
 
     Parameters
     ----------
@@ -125,12 +126,12 @@ def _voxels_to_matrix(voxels, fill=False):
     -------
     numpy array
                 3D matrix with x, y, z axis (blocks will be converted)
-    """
 
+    """
     if not isinstance(voxels, np.ndarray):
         voxels = np.array(voxels)
 
-    #Populate matrix
+    # Populate matrix
     if voxels.shape[1] == 4:
         mat = np.zeros((voxels.max(axis=0) + 1)[[-1, 1, 0]], dtype=np.bool)
         for col in voxels:
@@ -149,23 +150,25 @@ def _voxels_to_matrix(voxels, fill=False):
 
 
 def _matrix_to_voxels(matrix):
-    """ Turns matrix into voxels. Assumes that voxels have values True or 1.
-    """
+    """Turn matrix into voxels.
 
+    Assumes that voxels have values True or 1.
+    """
     # Turn matrix into voxels
     return np.vstack(np.where(matrix)).T
 
 
 def _apply_mask(mat, mask):
-    """ Substracts (logical_xor) mask from mat. Assumes that both matrices
-    are (a) of the same voxel size and (b) have the same origin.
-    """
+    """Substracts (logical_xor) mask from mat.
 
+    Assumes that both matrices are (a) of the same voxel size and (b) have the
+    same origin.
+    """
     # Get maximum dimension between mat and mask
     max_dim = np.max(np.array([mat.shape, mask.shape]), axis=0)
 
     # Bring mask in shape of mat
-    mask_pad = np.vstack( [np.array([0, 0, 0]), max_dim - mask.shape]).T
+    mask_pad = np.vstack([np.array([0, 0, 0]), max_dim - mask.shape]).T
     mask = np.pad(mask, mask_pad, mode='constant', constant_values=0)
     mask = mask[:mat.shape[0], :mat.shape[1], :mat.shape[2]]
 
@@ -174,9 +177,10 @@ def _apply_mask(mat, mask):
 
 
 def _mask_voxels(voxels, mask_voxels):
-    """ Mask voxels with other voxels. Assumes that both voxels have the
-    same size and origin."""
+    """Mask voxels with other voxels.
 
+    Assumes that both voxels have the same size and origin.
+    """
     # Generate matrices of the voxels
     mat = _voxels_to_matrix(voxels)
     mask = _voxels_to_matrix(mask_voxels)
@@ -190,5 +194,3 @@ def _mask_voxels(voxels, mask_voxels):
 
 def _blocks_to_voxels(blocks):
     return _matrix_to_voxels(_voxels_to_matrix(blocks))
-
-
