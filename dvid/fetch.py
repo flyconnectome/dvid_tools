@@ -743,7 +743,7 @@ def locs_to_ids(pos, chunk_size=10e3, progress=True, server=None, node=None):
     for ix in trange(0, len(pos), int(chunk_size),
                      disable=not progress,
                      desc='Querying positions'):
-        chunk = pos[ix: ix + chunk_size]
+        chunk = pos[ix: ix + int(chunk_size)]
 
         r = dvid_session().get("{}/api/node/{}/{}/labels".format(server,
                                                                  node,
