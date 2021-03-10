@@ -42,7 +42,7 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body']
 
 
-def dvid_session(appname=DEFAULT_APPNAME, user=getpass.getuser()):
+def dvid_session(appname=DEFAULT_APPNAME, user=None):
     """Return a default requests.Session() object.
 
     Automatically appends the 'u' and 'app' query string parameters to every
@@ -53,6 +53,11 @@ def dvid_session(appname=DEFAULT_APPNAME, user=getpass.getuser()):
     # so we keep one for each thread.
     thread_id = threading.current_thread().ident
     pid = os.getpid()
+
+    # If user not explicitly provided
+    if not user:
+        # Get globally defined user or fall back to system user
+        user = globals().get('user', getpass.getuser())
 
     try:
         s = DVID_SESSIONS[(appname, user, thread_id, pid)]
