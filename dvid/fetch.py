@@ -1,20 +1,21 @@
 # This code is part of dvid-tools (https://github.com/flyconnectome/dvid_tools)
 # and is released under GNU GPL3
 
+import getpass
 import inspect
 import os
 import re
-import getpass
 import requests
-import warnings
 import threading
+import warnings
 
 import numpy as np
 import pandas as pd
+import trimesh as tm
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from scipy.spatial.distance import cdist
 from tqdm import tqdm, trange
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from . import decode
 from . import mesh
@@ -39,7 +40,8 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'get_connectivity', 'get_labels_in_area', 'get_last_mod',
            'locs_to_ids', 'get_n_synapses', 'get_neuron', 'get_roi',
            'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
-           'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body']
+           'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body',
+           'get_ngmeshes', 'list_projects']
 
 
 def dvid_session(appname=DEFAULT_APPNAME, user=None):
@@ -97,6 +99,127 @@ def eval_param(server=None, node=None, user=None):
             parsed[n] = p
 
     return [parsed[n] for n in ['server', 'node', 'user']]
+
+
+def get_ngmeshes(x, fix=True, output='auto', on_error='warn',
+                 max_threads=5, progress=True, server=None, node=None):
+    """Fetch precomputed neuroglancer meshes for given body ID(s).
+
+    Parameters
+    ----------
+    x :             int | str | list thereof
+                    ID(s) of bodies for which to download meshes. Also
+                    accepts pandas DataFrames if they have a body ID column.
+    output :        "auto" | "navis" | "swc" | None
+                    Determines the output of this function:
+                     - auto = ``navis.MeshNeuron`` if navis is installed else
+                       ``trimesh.Trimesh``
+                     - navis = ``navis.MeshNeuron`` - raises error if ``navis``
+                       not installed
+                     - trimesh
+    on_error :      "warn" | "skip" | "raise"
+                    What to do if fetching a mesh throws an error. Typically
+                    this is because there is no mesh for a given body ID
+                    but it could also be a more general connection error.
+    max_threads :   int
+                    Max number of parallel queries to the dvid server.
+    progress :      bool
+                    Whether to show a progress bar or not.
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
+
+    Returns
+    -------
+    mesh :          trimesh.Trimesh
+
+    """
+    if output == 'navis' and not navis:
+        raise ImportError('Please install `navis`: pip3 install navis')
+
+    if on_error not in ("warn", "skip", "raise"):
+        raise ValueError('`on_error` must be either "warn", "skip" or "raise"')
+
+    if max_threads < 1:
+        raise ValueError('`max_threads` must be >= 1')
+
+    if isinstance(x, pd.DataFrame):
+        if 'bodyId' in x.columns:
+            x = x['bodyId'].values
+        elif 'bodyid' in x.columns:
+            x = x['bodyid'].values
+        else:
+            raise ValueError('DataFrame must have "bodyId" column.')
+    elif isinstance(x, int):
+        x = [x]
+    elif isinstance(x, str):
+        x = [int(x)]
+
+    # At this point we expect a list, set or array
+    if not isinstance(x, (list, set, np.ndarray)):
+        raise TypeError(f'Unexpected data type for body ID(s): "{type(x)}"')
+
+    out = []
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        futures = {}
+        for bid in x:
+            f = executor.submit(__get_mesh,
+                                bid,
+                                output=output,
+                                on_error=on_error,
+                                server=server, node=node)
+            futures[f] = bid
+
+        with tqdm(desc='Fetching',
+                  total=len(x),
+                  leave=False,
+                  disable=not progress) as pbar:
+            for f in as_completed(futures):
+                res = f.result()
+                # Skip neurons that caused an error
+                if res is not None:
+                    out.append(res)
+                pbar.update(1)
+
+    if (output == 'auto' and navis) or (output == 'navis'):
+        out = navis.NeuronList(out)
+
+    return out
+
+
+def __get_mesh(bodyid, output='auto', on_error='raise',
+               check_mutation=False, server=None, node=None):
+    """Load a single mesh."""
+    bodyid = utils.parse_bid(bodyid)
+
+    server, node, user = eval_param(server, node)
+
+    url = utils.make_url(server, 'api/node', node, f'{config.segmentation}_meshes',
+                         f'key/{bodyid}.ngmesh')
+    r = dvid_session().get(url)
+
+    try:
+        r.raise_for_status()
+    except BaseException:
+        if on_error == 'raise':
+            raise
+        elif on_error == 'warn':
+            warnings.warn(f'{bodyid}: {r.text.strip()}')
+        return
+
+    # Decode mesh
+    m = decode.read_ngmesh(r.content)
+
+    # Grab mutation ID (TODO)
+    #url = utils.make_url(server, 'api/node/', node, f'{config.segmentation}_meshes_mutid',
+    #                     f'key/{bodyid}.ngmesh')
+
+    if (output == 'auto' and navis) or (output == 'navis'):
+        n = navis.MeshNeuron(m, id=bodyid)
+        return n
+
+    return m
 
 
 def get_skeletons(x, save_to=None, output='auto', on_error='warn',

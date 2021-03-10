@@ -2,7 +2,11 @@
 # and is released under GNU GPL3
 
 import struct
+
 import numpy as np
+import trimesh as tm
+
+from io import BytesIO
 
 
 def decode_sparsevol(b, format='rles'):
@@ -45,3 +49,44 @@ def decode_sparsevol(b, format='rles'):
         raise ValueError('Format "blocks" not yet implemented.')
     else:
         raise ValueError('Unknown format "{}"'.format(format))
+
+
+def read_ngmesh(f, fix=True):
+    """Read neuroglancer mesh (single-resolution legacy format).
+
+    See here for specs:
+    https://github.com/google/neuroglancer/blob/master/src/neuroglancer/datasource/precomputed/meshes.md#legacy-single-resolution-mesh-format
+
+    Parameters
+    ----------
+    f :         File-like object
+                An open binary file object.
+    fix :       bool
+                If True, will try to fix some potential issues with the mesh
+                like duplicate vertices, etc.
+
+    Returns
+    -------
+    trimesh.Trimesh
+
+    """
+    if isinstance(f, bytes):
+        f = BytesIO(f)
+
+    num_vertices = np.frombuffer(f.read(4),
+                                 np.uint32)[0]
+    vertices = np.frombuffer(f.read(int(3*4*num_vertices)),
+                             np.float32).reshape(-1, 3)
+    faces = np.frombuffer(f.read(),
+                          np.uint32).reshape(-1, 3)
+
+    m = tm.Trimesh(vertices=vertices, faces=faces)
+
+    if fix:
+        m.remove_degenerate_faces()
+        m.remove_duplicate_faces()
+        m.remove_infinite_values()
+        m.remove_unreferenced_vertices()
+        m.merge_vertices()
+
+    return m

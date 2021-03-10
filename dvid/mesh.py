@@ -194,29 +194,3 @@ def _mask_voxels(voxels, mask_voxels):
 
 def _blocks_to_voxels(blocks):
     return _matrix_to_voxels(_voxels_to_matrix(blocks))
-
-
-def read_ngmesh(f, mutable=False):
-    """Read vertices and faces from neuroglancer mesh.
-
-    Single-resolution legacy format.
-
-    Parameters
-    ----------
-    f :         File-like object
-                An open binary file object.
-
-    Returns
-    -------
-    vertices    (N, 3) numpy array
-    faces :     (N, 3) numpy array
-
-    """
-    num_vertices = np.frombuffer(f.read(4), np.uint32)[0]
-    vertices_xyz = np.frombuffer(f.read(int(3*4*num_vertices)), np.float32).reshape(-1, 3)
-    faces = np.frombuffer(f.read(), np.uint32).reshape(-1, 3)
-
-    if mutable:
-        return vertices_xyz.copy(), faces.copy()
-    else:
-        return vertices_xyz, faces
