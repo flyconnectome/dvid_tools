@@ -8,6 +8,8 @@ import networkx as nx
 import pandas as pd
 import numpy as np
 import re
+import requests
+import urllib
 
 from io import StringIO
 from itertools import combinations
@@ -489,3 +491,38 @@ def check_skeleton(bodyid, sample=False, node=None, server=None):
 
     # Return difference in mean distances
     return np.mean(swc_dist) - np.mean(mesh_dist)
+
+
+def make_url(*args, **GET):
+    """Generates URL.
+
+    Parameters
+    ----------
+    *args
+                Will be turned into the URL. For example::
+
+                    >>> remote_instance.make_url('skeleton', 'list')
+                    'http://my-server.com/skeleton/list'
+
+    **GET
+                Keyword arguments are assumed to be GET request queries
+                and will be encoded in the url. For example::
+
+                    >>> remote_instance.make_url('skeleton', node_gt: 100)
+                    'http://my-server.com/skeleton?node_gt=100'
+
+    Returns
+    -------
+    url :       str
+
+    """
+    # Generate the URL
+    url = args[0]
+    for arg in args[1:]:
+        arg_str = str(arg)
+        joiner = '' if url.endswith('/') else '/'
+        relative = arg_str[1:] if arg_str.startswith('/') else arg_str
+        url = requests.compat.urljoin(url + joiner, relative)
+    if GET:
+        url += '?{}'.format(urllib.parse.urlencode(GET))
+    return url
