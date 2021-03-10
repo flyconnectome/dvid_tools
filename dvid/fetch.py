@@ -200,10 +200,10 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
                   disable=not progress) as pbar:
             for f in as_completed(futures):
                 res = f.result()
+                pbar.update(1)
                 if on_error == "skip" and res is None:
                     continue
                 out.append(res)
-                pbar.update(1)
 
     if (output == 'auto' and navis) or (output == 'navis'):
         out = navis.NeuronList(out)
