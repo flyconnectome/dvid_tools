@@ -1771,7 +1771,7 @@ def list_projects(server=None):
     """
     server, _, _ = eval_param(server)
 
-    url = make_url(server, 'api/repos/info')
+    url = utils.make_url(server, 'api/repos/info')
 
     r = dvid_session().get(url)
 
