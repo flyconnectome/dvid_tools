@@ -1754,3 +1754,27 @@ def get_skeleton_mutation(bodyid, server=None, node=None):
     else:
         swc_mut = re.search('"mutation id": (.*?)}', header).group(1)
         return int(swc_mut)
+
+
+def list_projects(server=None):
+    """List available projects on the server.
+
+    Parameters
+    ----------
+    server :    str
+                If not provided will fall back to globally defined server.
+
+    Returns
+    -------
+    pandas.DataFrame
+
+    """
+    server, _, _ = eval_param(server)
+
+    url = make_url(server, 'api/repos/info')
+
+    r = dvid_session().get(url)
+
+    r.raise_for_status()
+
+    return pd.DataFrame.from_records(list(r.json().values()))
