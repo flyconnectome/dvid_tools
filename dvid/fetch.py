@@ -889,19 +889,16 @@ def locs_to_ids(pos, chunk_size=10e3, progress=True, server=None, node=None):
     pos = pos.astype(int)
 
     data = []
-    for ix in trange(0, len(pos), int(chunk_size),
-                     disable=not progress,
-                     desc='Querying positions'):
-        chunk = pos[ix: ix + int(chunk_size)]
+    with tqdm(desc='Querying positions', total=len(pos), leave=False) as pbar:
+        for ix in range(0, len(pos), int(chunk_size)):
+            chunk = pos[ix: ix + int(chunk_size)]
 
-        r = dvid_session().get(urllib.parse.urljoin(server,
-                               "api/node/{}/{}/labels".format(node,
-                                                              config.segmentation)),
-                               json=chunk.tolist())
+            url = utils.make_url(server, f'api/node/{node}/{config.segmentation}/labels')
+            r = dvid_session().get(url, json=chunk.tolist())
 
-        r.raise_for_status()
-
-        data += r.json()
+            r.raise_for_status()
+            data += r.json()
+            pbar.update(len(chunk))
 
     return np.array(data)
 
