@@ -24,6 +24,7 @@ Reading/Writing Data
     get_connectivity
     get_labels_in_area
     get_last_mod
+    get_master_node
     get_n_synapses
     get_neuron
     get_roi

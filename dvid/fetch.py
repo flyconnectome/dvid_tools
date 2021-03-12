@@ -7,13 +7,14 @@ import os
 import re
 import requests
 import threading
+import urllib
 import warnings
 
 import numpy as np
 import pandas as pd
-import trimesh as tm
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.exceptions import HTTPError
 from scipy.spatial.distance import cdist
 from tqdm import tqdm, trange
 
@@ -41,7 +42,7 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'locs_to_ids', 'get_n_synapses', 'get_neuron', 'get_roi',
            'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
            'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body',
-           'get_ngmeshes', 'list_projects']
+           'get_ngmeshes', 'list_projects', 'get_master_node']
 
 
 def dvid_session(appname=DEFAULT_APPNAME, user=None):
@@ -1906,3 +1907,38 @@ def list_projects(server=None):
     r.raise_for_status()
 
     return pd.DataFrame.from_records(list(r.json().values()))
+
+
+def get_master_node(id, server=None):
+    """Get UUID of the current master node.
+
+    Parameters
+    ----------
+    id :            str
+                    UUID of a node or a project you want the current master
+                    node for. You can get use `list_projects` to get the root
+                    ID for a project and then use this function to get the
+                    master.
+    server :        str, optional
+                    If not provided will fall back to globally defined server.
+
+    Returns
+    -------
+    master :        str
+                    ID of master node.
+
+    """
+    server, _, _ = eval_param(server)
+
+    url = utils.make_url(server, f'api/repo/{id}/branch-versions/master')
+
+    r = dvid_session().get(url)
+
+    try:
+        r.raise_for_status()
+    except HTTPError:
+        raise HTTPError(f'{r.status_code} {r.reason}: {r.text}')
+    except BaseException:
+        raise
+
+    return r.json()[0]
