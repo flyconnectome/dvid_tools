@@ -857,7 +857,7 @@ def locs_to_ids(pos, chunk_size=10e3, progress=True, server=None, node=None):
 
     Returns
     -------
-    body_ids :      list
+    body_ids :      np.ndarray
 
     """
     server, node, user = eval_param(server, node)
@@ -888,7 +888,7 @@ def locs_to_ids(pos, chunk_size=10e3, progress=True, server=None, node=None):
 
         data += r.json()
 
-    return data
+    return np.array(data)
 
 
 def get_body_position(bodyid, server=None, node=None):
