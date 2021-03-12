@@ -133,7 +133,9 @@ def get_ngmeshes(x, fix=True, output='auto', on_error='warn',
 
     Returns
     -------
-    mesh :          trimesh.Trimesh
+    mesh            trimesh.Trimesh | navis.MeshNeuron
+                    Mutation ID is attached as `mutation_id` property
+                    (is ``None`` if not available.)
 
     """
     if output == 'navis' and not navis:
@@ -165,7 +167,7 @@ def get_ngmeshes(x, fix=True, output='auto', on_error='warn',
     with ThreadPoolExecutor(max_workers=max_threads) as executor:
         futures = {}
         for bid in x:
-            f = executor.submit(__get_mesh,
+            f = executor.submit(__get_ngmesh,
                                 bid,
                                 output=output,
                                 on_error=on_error,
@@ -189,8 +191,8 @@ def get_ngmeshes(x, fix=True, output='auto', on_error='warn',
     return out
 
 
-def __get_mesh(bodyid, output='auto', on_error='raise',
-               check_mutation=False, server=None, node=None):
+def __get_ngmesh(bodyid, output='auto', on_error='raise',
+               check_mutation=True, server=None, node=None):
     """Load a single mesh."""
     bodyid = utils.parse_bid(bodyid)
 
@@ -212,12 +214,23 @@ def __get_mesh(bodyid, output='auto', on_error='raise',
     # Decode mesh
     m = decode.read_ngmesh(r.content)
 
-    # Grab mutation ID (TODO)
-    #url = utils.make_url(server, 'api/node/', node, f'{config.segmentation}_meshes_mutid',
-    #                     f'key/{bodyid}.ngmesh')
+    # Grab mutation ID
+    if check_mutation:
+        url = utils.make_url(server, 'api/node/', node, f'{config.segmentation}_meshes_mutid',
+                             f'key/{bodyid}')
+        r = dvid_session().get(url)
+        # This query won't work with older nodes
+        # -> hence wrapping it in a try/except block
+        try:
+            r.raise_for_status()
+            m.mutation_id = int(r.json())
+        except HTTPError:
+            m.mutation_id = None
+        except BaseException:
+            raise
 
     if (output == 'auto' and navis) or (output == 'navis'):
-        n = navis.MeshNeuron(m, id=bodyid)
+        n = navis.MeshNeuron(m, id=bodyid, mutation_id=m.mutation_id)
         return n
 
     return m
@@ -382,6 +395,8 @@ def __get_skeleton(bodyid, save_to=None, output='auto', on_error='raise',
 
     if 'mutation id' in header:
         swc.mutation_id = int(re.search('"mutation id": (.*?)}', header).group(1))
+    else:
+        swc.mutation_id = None
 
     if check_mutation:
         if not getattr(swc, 'mutation_id', None):
@@ -1826,6 +1841,8 @@ def get_last_mod(bodyid, server=None, node=None):
 
 def get_skeleton_mutation(bodyid, server=None, node=None):
     """Fetch mutation ID of given body.
+
+    Works by downloading the SWC file and parsing only the header.
 
     Parameters
     ----------
