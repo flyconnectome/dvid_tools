@@ -889,7 +889,8 @@ def locs_to_ids(pos, chunk_size=10e3, progress=True, server=None, node=None):
     pos = pos.astype(int)
 
     data = []
-    with tqdm(desc='Querying positions', total=len(pos), leave=False) as pbar:
+    with tqdm(desc='Querying positions', total=len(pos), disable=not progress,
+              leave=False) as pbar:
         for ix in range(0, len(pos), int(chunk_size)):
             chunk = pos[ix: ix + int(chunk_size)]
 
