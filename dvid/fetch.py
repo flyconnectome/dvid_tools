@@ -340,14 +340,8 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
                   leave=False,
                   disable=not progress) as pbar:
             for f in as_completed(futures):
+                res = f.result()
                 pbar.update(1)
-                try:
-                    res = f.result()
-                except BaseException:
-                    if on_error == 'skip':
-                        continue
-                    else:
-                        raise
                 if on_error == "skip" and res is None:
                     continue
                 out.append(res)
@@ -365,12 +359,13 @@ def __get_skeleton(bodyid, save_to=None, output='auto', on_error='raise',
 
     server, node, user = eval_param(server, node)
 
-    r = dvid_session().get(urllib.parse.urljoin(server,
-                                                'api/node/{}/{}_skeletons/key/{}_swc'.format(node,
-                                                                           config.segmentation,
-                                                                           bodyid)))
+    url = urllib.parse.urljoin(server,
+                               'api/node/{}/{}_skeletons/key/{}_swc'.format(node,
+                                                                            config.segmentation,
+                                                                            bodyid))
 
     try:
+        r = dvid_session().get(url)
         r.raise_for_status()
     except BaseException:
         if on_error == 'raise':
