@@ -340,8 +340,14 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
                   leave=False,
                   disable=not progress) as pbar:
             for f in as_completed(futures):
-                res = f.result()
                 pbar.update(1)
+                try:
+                    res = f.result()
+                except BaseException:
+                    if on_error == 'skip':
+                        continue
+                    else:
+                        raise
                 if on_error == "skip" and res is None:
                     continue
                 out.append(res)
