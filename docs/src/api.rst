@@ -13,6 +13,7 @@ Reading/Writing Data
 
     add_bookmarks
     edit_annotation
+    ids_exist
     get_adjacency
     get_annotation
     get_assignment_status
@@ -29,6 +30,7 @@ Reading/Writing Data
     get_neuron
     get_roi
     get_segmentation_info
+    get_sizes
     get_skeletons
     get_synapses
     get_user_bookmarks

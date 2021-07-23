@@ -45,7 +45,7 @@ Examples
 Setting up
 ::
 
-    import dvidtools as dt
+    import dvid as dv
 
     # You can pass these parameters explicitly to each function
     # but defining them globally is more convenient
@@ -53,50 +53,50 @@ Setting up
     node = '54f7'
     user = 'schlegelp'
 
-    dt.set_param(server, node, user)
+    dv.set_param(server, node, user)
 
 
 Get user bookmarks and add annotations
 ::
 
     # Get bookmarks
-    bm = dt.get_user_bookmarks()
+    bm = dv.get_user_bookmarks()
 
     # Add column with neuron name (if available)
-    bm['body name'] = bm['body ID'].map(lambda x: dt.get_annotation(x).get('name', None))
+    bm['body name'] = bm['body ID'].map(lambda x: dv.get_annotation(x).get('name', None))
 
 
 Fetch skeleton for a single neuron and save as SWC
 ::
 
     body_id = '1700937093'
-    dt.get_skeleton(body_id, save_to=body_id + '.swc')
+    dv.get_skeleton(body_id, save_to=body_id + '.swc')
 
 
 Get table of synapse locations
 ::
 
     body_id = '1700937093'
-    syn = dt.get_synapses(body_id)
+    syn = dv.get_synapses(body_id)
 
 
 Get synaptic partners of a neuron
 ::
 
     body_id = '1700937093'
-    partners = dt.get_connectivity(body_id)
+    partners = dv.get_connectivity(body_id)
 
 
-Get connectivity in given ROI using `pymaid <https://pymaid.readthedocs.io>`_
+Get connectivity in given ROI using `navis <https://navis.readthedocs.io>`_
 ::
 
-    import pymaid
+    import navis
 
     # Get the LH ROI
-    lh = pymaid.Volume(*dt.get_roi('LH'))
+    lh = navis.Volume(*dv.get_roi('LH'))
 
     # Fetch connectivity but use filter function
-    lh_partners = dt.get_connectivity(body_id, pos_filter=lambda x: pymaid.in_volume(x, lh))
+    lh_partners = dv.get_connectivity(body_id, pos_filter=lambda x: navis.in_volume(x, lh))
 
 
 Detect potential open ends and write them to ``.json`` file that can be
@@ -104,7 +104,7 @@ imported into `neutu <https://github.com/janelia-flyem/NeuTu>`_.
 ::
 
     body_id = '1700937093'
-    tips = dt.detect_tips(body_id, save_to='~/Documents/{}.json'.format(body_id))
+    tips = dv.detect_tips(body_id, save_to='~/Documents/{}.json'.format(body_id))
 
 
 You can do the same but weight potential open ends using a pre-trained
@@ -118,5 +118,5 @@ In a terminal run::
 Once scikit-learn is installed, you can run the tip detector with
 classifier confidences::
 
-    tips = dt.detect_tips(body_id, use_clf=True,
+    tips = dv.detect_tips(body_id, use_clf=True,
                           save_to='~/Documents/{}.json'.format(body_id))
