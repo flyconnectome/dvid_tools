@@ -42,7 +42,8 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'locs_to_ids', 'get_n_synapses', 'get_neuron', 'get_roi',
            'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
            'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body',
-           'get_ngmeshes', 'list_projects', 'get_master_node']
+           'get_ngmeshes', 'list_projects', 'get_master_node',
+           'get_sizes', 'ids_exist']
 
 
 def dvid_session(appname=DEFAULT_APPNAME, user=None):
@@ -884,7 +885,7 @@ def locs_to_ids(pos, chunk_size=10e3, progress=True, server=None, node=None):
         pos.reshape(1, 3)
 
     if pos.ndim != 2 or pos.shape[1] != 3:
-        raise ValueError('Expected (N, 3) array of positions, got {}')
+        raise ValueError(f'Expected (N, 3) array of positions, got {pos.shape}')
 
     # Make sure we are working on integers
     pos = pos.astype(int)
@@ -903,6 +904,106 @@ def locs_to_ids(pos, chunk_size=10e3, progress=True, server=None, node=None):
             pbar.update(len(chunk))
 
     return np.array(data)
+
+
+def get_sizes(ids, chunk_size=1e3, progress=True, server=None, node=None):
+    """Get sizes (in supervoxels) for given body IDs.
+
+    Parameters
+    ----------
+    ids :           iterable
+                    [12345, 455677, ...] IDs. Must be integers!
+    chunk_size :    int, optional
+                    Splits query into chunks of a given size to reduce strain on
+                    server.
+    progress :      bool
+                    If True, show progress bar.
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
+
+    Returns
+    -------
+    sizes :         np.ndarray
+                    For IDs that do not exist the size will be 0.
+
+    """
+    server, node, user = eval_param(server, node)
+
+    ids = np.asarray(ids)
+
+    if ids.ndim != 1:
+        raise ValueError(f'Expected (N, ) array of IDs, got {ids.shape}')
+
+    # Make sure we are working on integers
+    ids = ids.astype(int)
+
+    data = []
+    with tqdm(desc='Querying sizes', total=len(ids), disable=not progress,
+              leave=False) as pbar:
+        for ix in range(0, len(ids), int(chunk_size)):
+            chunk = ids[ix: ix + int(chunk_size)]
+
+            url = utils.make_url(server, f'api/node/{node}/{config.segmentation}/sizes')
+            r = dvid_session().get(url, json=chunk.tolist())
+
+            r.raise_for_status()
+            data += r.json()
+            pbar.update(len(chunk))
+
+    return np.array(data)
+
+
+def ids_exist(ids, chunk_size=1e3, progress=True, server=None, node=None):
+    """Check if given IDs exist.
+
+    Parameters
+    ----------
+    ids :           iterable
+                    [12345, 455677, ...] IDs. Must be integers!
+    chunk_size :    int, optional
+                    Splits query into chunks of a given size to reduce strain on
+                    server.
+    progress :      bool
+                    If True, show progress bar.
+    server :        str, optional
+                    If not provided, will try reading from global.
+    node :          str, optional
+                    If not provided, will try reading from global.
+
+    Returns
+    -------
+    exists :        np.ndarray
+                    Array of booleans.
+
+    """
+    server, node, user = eval_param(server, node)
+
+    ids = np.asarray(ids)
+
+    if ids.ndim != 1:
+        raise ValueError(f'Expected (N, ) array of IDs, got {ids.shape}')
+
+    # Make sure we are working on integers
+    ids = ids.astype(int)
+
+    data = []
+    with tqdm(desc='Querying', total=len(ids), disable=not progress,
+              leave=False) as pbar:
+        for ix in range(0, len(ids), int(chunk_size)):
+            chunk = ids[ix: ix + int(chunk_size)]
+
+            url = utils.make_url(server, f'api/node/{node}/{config.segmentation}/sizes')
+            r = dvid_session().get(url, json=chunk.tolist())
+
+            r.raise_for_status()
+            data += r.json()
+            pbar.update(len(chunk))
+
+    sizes = np.array(data)
+
+    return sizes != 0
 
 
 def get_body_position(bodyid, server=None, node=None):
