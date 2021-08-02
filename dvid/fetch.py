@@ -16,7 +16,7 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.exceptions import HTTPError
 from scipy.spatial.distance import cdist
-from tqdm import tqdm, trange
+from tqdm import tqdm
 
 from . import decode
 from . import mesh
@@ -43,7 +43,7 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
            'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body',
            'get_ngmeshes', 'list_projects', 'get_master_node',
-           'get_sizes', 'ids_exist']
+           'get_sizes', 'ids_exist', 'skeletonize_neuron']
 
 
 def dvid_session(appname=DEFAULT_APPNAME, user=None):
@@ -277,10 +277,16 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
 
     Returns
     -------
-    SWC :       pandas.DataFrame
-                Only if ``save_to=None`` else ``True``.
+    SWC :           pandas.DataFrame
+                    Only if ``save_to=None`` else ``True``.
     None
-                If no skeleton found.
+                    If no skeleton found.
+
+    See Also
+    --------
+    :func:`dvid.get_skeleton_mutation`
+                    If you want to create a skeleton based on the current
+                    voxels yourself.
 
     Examples
     --------
@@ -1344,9 +1350,56 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
         raise ValueError('Unknown return format "{}"'.format(form))
 
 
+def skeletonize_neuron(bodyid, server=None, node=None):
+    """Skeletonize given body.
+
+    This can be useful if the precomputed skeletons are not up-to-date or have
+    corrupt topology. This function requires `skeletor` to be installed::
+
+      pip3 install skeletor
+
+    Parameters
+    ----------
+    bodyid :    int | str
+                ID of body for which to generate skeleton.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    skeletor.Skeleton
+                In "block" coordinates - i.e. typically in whatever resolution
+                the segmentation data is in.
+
+    See Also
+    --------
+    :func:`dvid.get_skeletons`
+                To download precomputed skeletons.
+
+    """
+    try:
+        import skeletor as sk
+        import trimesh as tm
+    except ImportError:
+        raise ImportError('`skeletonize_neuron` requires `skeletor` to be installed')
+    except BaseException:
+        raise
+
+    # Get the sparse-vol mesh
+    verts, faces = get_neuron(bodyid, step_size=1, server=server, node=node)
+
+    # Make mesh
+    mesh = tm.Trimesh(verts, faces)
+
+    # Skeletonize
+    return sk.skeletonize.by_wavefront(mesh, progress=False)
+
+
 def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
                ret_type='MESH', bbox=None, server=None, node=None):
-    """Get neuron as mesh.
+    """Get neuron as mesh (or voxels).
 
     Parameters
     ----------
