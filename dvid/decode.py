@@ -39,7 +39,7 @@ def decode_sparsevol(b, format='rles'):
             offset = 12 + (i * 16)
             x, y, z, run_len = struct.unpack('iiii', b[offset: offset + 16])
 
-            this_run = np.repeat([[x, y, z]], run_len, axis=0)
+            this_run = np.array([[x, y, z]] * run_len)
             this_run[:, 0] = np.arange(x, x + run_len)
 
             coords.append(this_run)
