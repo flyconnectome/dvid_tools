@@ -3,7 +3,7 @@
 
 import numpy as np
 
-from skimage.measure import marching_cubes_lewiner
+from skimage import measure
 from scipy.ndimage.morphology import binary_erosion, binary_fill_holes
 
 
@@ -26,28 +26,30 @@ def mesh_from_voxels(voxels, v_size, step_size=1):
     Returns
     -------
     vertices :  (N, 3) numpy array
-    faces :     (N, 3) numpy array
+    faces :     (M, 3) numpy array
 
     """
     # Turn voxels into matrix
     mat = _voxels_to_matrix(voxels)
 
     # Add border to matrix - otherwise marching cube generates holes
-    mat = np.pad(mat, pad_width=5, mode='constant', constant_values=0)
+    mat = np.pad(mat, pad_width=1, mode='constant', constant_values=0)
 
     # Use marching cubes to create surface model
-    verts, faces, normals, values = marching_cubes_lewiner(mat,
-                                                           level=.5,
-                                                           step_size=step_size,
-                                                           allow_degenerate=False,
-                                                           gradient_direction='ascent',
-                                                           spacing=v_size)
+    # (newer versions of skimage have a "marching cubes" function and
+    # the marching_cubes_lewiner is deprecreated)
+    func = getattr(measure, 'marching_cubes', measure.marching_cubes_lewiner)
+    verts, faces, normals, values = func(mat,
+                                         level=.5,
+                                         step_size=step_size,
+                                         allow_degenerate=False,
+                                         gradient_direction='ascent',
+                                         spacing=v_size)
 
     # Compensate for earlier padding offset
-    verts -= np.array(v_size) * 5
+    verts -= np.array(v_size) * 1
 
     return verts, faces
-
 
 def remove_surface_voxels(voxels, **kwargs):
     """Removes surface voxels."""
