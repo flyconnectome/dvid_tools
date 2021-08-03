@@ -1350,7 +1350,7 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
         raise ValueError('Unknown return format "{}"'.format(form))
 
 
-def skeletonize_neuron(bodyid, server=None, node=None):
+def skeletonize_neuron(bodyid, scale='COARSE', server=None, node=None):
     """Skeletonize given body.
 
     This can be useful if the precomputed skeletons are not up-to-date or have
@@ -1362,6 +1362,13 @@ def skeletonize_neuron(bodyid, server=None, node=None):
     ----------
     bodyid :    int | str
                 ID of body for which to generate skeleton.
+    scale :     "COARSE" | int
+                Resolution of sparse volume to use for skeletonization.
+                Lower = higher res. Higher resolutions tend to produce more
+                accurate but also more noisy (e.g. tiny free-floating fragments)
+                skeletons. In my experience, `scale="COARSE"` for quick & dirty
+                and `scale=4` for high-quality skeletons make the most sense.
+                Scales 5 and 6 are too low and below 4 become prohibitively slow.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -1370,8 +1377,7 @@ def skeletonize_neuron(bodyid, server=None, node=None):
     Returns
     -------
     skeletor.Skeleton
-                In "block" coordinates - i.e. typically in whatever resolution
-                the segmentation data is in.
+                In "nm" coordinates.
 
     See Also
     --------
@@ -1388,7 +1394,7 @@ def skeletonize_neuron(bodyid, server=None, node=None):
         raise
 
     # Get the sparse-vol mesh
-    verts, faces = get_neuron(bodyid, step_size=1, server=server, node=node)
+    verts, faces = get_neuron(bodyid, scale=scale, step_size=1, server=server, node=node)
 
     # Make mesh
     mesh = tm.Trimesh(verts, faces)
