@@ -193,7 +193,7 @@ def get_ngmeshes(x, fix=True, output='auto', on_error='warn',
 
 
 def __get_ngmesh(bodyid, output='auto', on_error='raise',
-               check_mutation=True, server=None, node=None):
+                 check_mutation=True, server=None, node=None):
     """Load a single mesh."""
     bodyid = utils.parse_bid(bodyid)
 
@@ -1421,9 +1421,10 @@ def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
     save_to :   str | None, optional
                 If provided, will not convert to verts and faces but instead
                 save as response from server as binary file.
-    ret_type :  "MESH" | "COORDS" | "INDEX", optional
+    ret_type :  "MESH" | "COORDS" | "INDEX" | "RAW"
                 If "MESH" will return vertices and faces. If "COORDS" will
-                return voxel coordinates. "INDEX" returns voxel indices.
+                return voxel coordinates. "INDEX" returns voxel indices. "RAW"
+                will return raw bytes.
     bbox :      list | None, optional
                 Bounding box to which to restrict the query to.
                 Format: ``[x_min, x_max, y_min, y_max, z_min, z_max]``.
@@ -1439,7 +1440,7 @@ def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
     faces :     np.array
 
     """
-    if ret_type.upper() not in ['MESH', 'COORDS', 'INDEX']:
+    if ret_type.upper() not in ('MESH', 'COORDS', 'INDEX', 'RAW'):
         raise ValueError('"ret_type" must be "MESH", "COORDS" or "INDEX"')
 
     server, node, user = eval_param(server, node)
@@ -1449,7 +1450,7 @@ def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
     # Get voxel sizes based on scale
     info = get_segmentation_info(server, node)['Extended']
 
-    vsize = {'COARSE': info['BlockSize']}
+    vsize = {'COARSE': [s * 8 for s in info['BlockSize']]}
     vsize.update({i: np.array(info['VoxelSize']) * 2**i for i in range(info['MaxDownresLevel'])})
 
     if isinstance(scale, int) and scale > info['MaxDownresLevel']:
@@ -1486,6 +1487,9 @@ def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
         with open(save_to, 'wb') as f:
             f.write(b)
         return
+
+    if ret_type.upper() == 'RAW':
+        return b
 
     # Decode binary format
     header, voxels = decode.decode_sparsevol(b, format='rles')
