@@ -19,7 +19,7 @@ from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
 from . import decode
-from . import mesh
+from . import meshing
 from . import utils
 from . import config
 
@@ -1350,11 +1350,17 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
         raise ValueError('Unknown return format "{}"'.format(form))
 
 
-def skeletonize_neuron(bodyid, scale='COARSE', server=None, node=None):
+def skeletonize_neuron(bodyid,
+                       scale=4,
+                       server=None,
+                       node=None,
+                       progress=True,
+                       **kwargs):
     """Skeletonize given body.
 
-    This can be useful if the precomputed skeletons are not up-to-date or have
-    corrupt topology. This function requires `skeletor` to be installed::
+    Fetches voxels from DVID, creates a mesh (via `get_neuron`) and then
+    skeletonizes it. This can be useful if the precomputed skeletons are not
+    up-to-date or have corrupt topology. This function requires `skeletor` to be installed::
 
       pip3 install skeletor
 
@@ -1362,17 +1368,22 @@ def skeletonize_neuron(bodyid, scale='COARSE', server=None, node=None):
     ----------
     bodyid :    int | str
                 ID of body for which to generate skeleton.
-    scale :     "COARSE" | int
+    scale :     int | "COARSE"
                 Resolution of sparse volume to use for skeletonization.
                 Lower = higher res. Higher resolutions tend to produce more
                 accurate but also more noisy (e.g. tiny free-floating fragments)
                 skeletons. In my experience, `scale="COARSE"` for quick & dirty
                 and `scale=4` for high-quality skeletons make the most sense.
-                Scales 5 and 6 are too low and below 4 become prohibitively slow.
+                Scales 5 and 6 are too coarse and below 2 becomes prohibitively
+                slow.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
                 If not provided, will try reading from global.
+    progress :  bool
+                Whether to show progress bars.
+    **kwargs
+                Keyword arguments are passed through to `mesh_from_voxels`.
 
     Returns
     -------
@@ -1387,24 +1398,33 @@ def skeletonize_neuron(bodyid, scale='COARSE', server=None, node=None):
     """
     try:
         import skeletor as sk
-        import trimesh as tm
     except ImportError:
         raise ImportError('`skeletonize_neuron` requires `skeletor` to be installed')
     except BaseException:
         raise
 
-    # Get the sparse-vol mesh
-    verts, faces = get_neuron(bodyid, scale=scale, step_size=1, server=server, node=node)
+    defaults = dict(step_size=1)
+    defaults.update(kwargs)
 
-    # Make mesh
-    mesh = tm.Trimesh(verts, faces)
+    # Get the sparse-vol mesh
+    mesh = get_neuron(bodyid, scale=scale,
+                      server=server, node=node,
+                      progress=progress,
+                      **defaults)
 
     # Skeletonize
-    return sk.skeletonize.by_wavefront(mesh, progress=False)
+    return sk.skeletonize.by_wavefront(mesh, progress=progress)
 
 
-def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
-               ret_type='MESH', bbox=None, server=None, node=None):
+def get_neuron(bodyid,
+               scale='COARSE',
+               step_size=1,
+               save_to=None,
+               ret_type='MESH',
+               bbox=None,
+               server=None,
+               node=None,
+               **kwargs):
     """Get neuron as mesh (or voxels).
 
     Parameters
@@ -1432,6 +1452,10 @@ def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
                 If not provided, will try reading from global.
     node :      str, optional
                 If not provided, will try reading from global.
+    **kwargs
+                Keyword arguments are passed through to
+                `dv.mesh.mesh_from_voxels`.
+
 
     Returns
     -------
@@ -1499,11 +1523,17 @@ def get_neuron(bodyid, scale='COARSE', step_size=2, save_to=None,
     elif ret_type.upper() == 'COORDS':
         return voxels * vsize[scale]
 
-    verts, faces = mesh.mesh_from_voxels(voxels,
-                                         v_size=vsize[scale],
-                                         step_size=step_size)
+    defaults = dict(chunk_size=200 if scale in (0, 1, 2, 3, 4) else None,
+                    merge_fragments=True,
+                    pad_chunks=True)
+    defaults.update(kwargs)
 
-    return verts, faces
+    mesh = meshing.mesh_from_voxels(voxels,
+                                    spacing=vsize[scale],
+                                    step_size=step_size,
+                                    **defaults)
+
+    return mesh
 
 
 def get_segmentation_info(server=None, node=None):
