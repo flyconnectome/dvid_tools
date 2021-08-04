@@ -237,7 +237,7 @@ def _mesh_from_voxels_chunked(voxels,
         all_faces.append(frag[1] + verts_offset)
         verts_offset += len(frag[0])
 
-    all_verts = np.concatenate(all_verts, axis=0)
+    all_verts = (np.concatenate(all_verts, axis=0) + offset) * spacing
     all_faces = np.concatenate(all_faces, axis=0)
 
     # Make trimesh
