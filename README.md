@@ -12,12 +12,13 @@ Want to query a neuPrint server instead? Check out
 
 - get/set user bookmarks
 - get/set neuron annotations (names)
-- download meshes, skeletons (SWCs) and ROIs
+- download precomputed meshes, skeletons (SWCs) and ROIs
 - get basic neuron info (# of voxels/synapses)
 - get synapses
 - get connectivity (adjacency matrix, connectivity table)
 - retrieve labels (TODO, to split, etc)
 - map positions to body IDs
+- mesh and/or skeletonize sparsevols
 - detect potential open ends (based on a script by [Stephen Plaza](https://github.com/stephenplaza))
 
 ## Install
@@ -44,7 +45,13 @@ detector with classifier-derived confidence, you will also need
 [sciki-learn](https://scikit-learn.org):
 
 ```shell
-pip install scikit-learn
+pip3 install scikit-learn
+```
+
+For from-scratch skeletonization you need to install `skeletor`:
+
+```shell
+pip3 install skeletor
 ```
 
 ## Examples

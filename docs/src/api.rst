@@ -26,15 +26,18 @@ Reading/Writing Data
     get_labels_in_area
     get_last_mod
     get_master_node
+    get_meshes
     get_n_synapses
-    get_neuron
     get_roi
     get_segmentation_info
     get_sizes
     get_skeletons
+    get_sparsevol
     get_synapses
     get_user_bookmarks
+    mesh_neuron
     setup
+    skeletonize_neuron
     locs_to_ids
 
 Tools

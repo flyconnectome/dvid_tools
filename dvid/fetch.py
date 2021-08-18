@@ -14,14 +14,12 @@ import numpy as np
 import pandas as pd
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import lru_cache
 from requests.exceptions import HTTPError
 from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
-from . import decode
-from . import meshing
-from . import utils
-from . import config
+from . import decode, meshing, utils, config
 
 # See if navis is available
 try:
@@ -39,11 +37,11 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'get_assignment_status', 'get_available_rois',
            'get_body_position', 'get_body_profile', 'get_connections',
            'get_connectivity', 'get_labels_in_area', 'get_last_mod',
-           'locs_to_ids', 'get_n_synapses', 'get_neuron', 'get_roi',
+           'locs_to_ids', 'get_n_synapses', 'get_roi', 'get_sparsevol',
            'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
            'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body',
-           'get_ngmeshes', 'list_projects', 'get_master_node',
-           'get_sizes', 'ids_exist', 'skeletonize_neuron']
+           'get_meshes', 'list_projects', 'get_master_node',
+           'get_sizes', 'ids_exist', 'skeletonize_neuron', 'mesh_neuron']
 
 
 def dvid_session(appname=DEFAULT_APPNAME, user=None):
@@ -103,16 +101,16 @@ def eval_param(server=None, node=None, user=None):
     return [parsed[n] for n in ['server', 'node', 'user']]
 
 
-def get_ngmeshes(x, fix=True, output='auto', on_error='warn',
-                 max_threads=5, progress=True, server=None, node=None):
-    """Fetch precomputed neuroglancer meshes for given body ID(s).
+def get_meshes(x, fix=True, output='auto', on_error='warn',
+               max_threads=5, progress=True, server=None, node=None):
+    """Fetch precomputed meshes for given body ID(s).
 
     Parameters
     ----------
     x :             int | str | list thereof
                     ID(s) of bodies for which to download meshes. Also
                     accepts pandas DataFrames if they have a body ID column.
-    output :        "auto" | "navis" | "swc" | None
+    output :        "auto" | "navis" | "trimesh" | None
                     Determines the output of this function:
                      - auto = ``navis.MeshNeuron`` if navis is installed else
                        ``trimesh.Trimesh``
@@ -137,6 +135,12 @@ def get_ngmeshes(x, fix=True, output='auto', on_error='warn',
     mesh            trimesh.Trimesh | navis.MeshNeuron
                     Mutation ID is attached as `mutation_id` property
                     (is ``None`` if not available.)
+
+    See Also
+    --------
+    :func:`~dvid.fetch.mesh_neuron`
+                Use this to create a mesh from scratch - e.g. if there is no
+                precomputed mesh for a given body.
 
     """
     if output == 'navis' and not navis:
@@ -287,6 +291,9 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
     :func:`dvid.get_skeleton_mutation`
                     If you want to create a skeleton based on the current
                     voxels yourself.
+    :func:`~dvid.fetch.skeletonize_neuron`
+                    Use this to create a skeleton from scratch - e.g. if there
+                    is no precomputed skeleton for a given body.
 
     Examples
     --------
@@ -1041,12 +1048,12 @@ def get_body_position(bodyid, server=None, node=None):
         return s.loc[0, ['x', 'y', 'z']].values
     else:
         # First get voxels of the coarse neuron
-        voxels = get_neuron(bodyid, scale='coarse', ret_type='INDEX',
-                            server=server, node=node)
+        voxels = mesh_neuron(bodyid, scale='coarse', ret_type='INDEX',
+                             server=server, node=node)
 
         # Erode surface voxels to make sure we get a central position
         while True:
-            eroded = mesh.remove_surface_voxels(voxels)
+            eroded = meshing.remove_surface_voxels(voxels)
 
             # Stop before no more voxels left
             if eroded.size == 0:
@@ -1061,13 +1068,13 @@ def get_body_position(bodyid, server=None, node=None):
         bbox = np.vstack([v, v]).T
         bbox[:, 1] += 63
 
-        voxels = get_neuron(bodyid, scale=0, ret_type='INDEX',
-                            bbox=bbox.ravel(),
-                            server=server, node=node)
+        voxels = mesh_neuron(bodyid, scale=0, ret_type='INDEX',
+                             bbox=bbox.ravel(),
+                             server=server, node=node)
 
         # Erode surface voxels again to make sure we get a central position
         while True:
-            eroded = mesh.remove_surface_voxels(voxels)
+            eroded = meshing.remove_surface_voxels(voxels)
 
             # Stop before no more voxels left
             if eroded.size == 0:
@@ -1323,11 +1330,11 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
         if form.upper() == 'BLOCKS':
             return blocks
         elif form.upper() == 'VOXELS':
-            return mesh._blocks_to_voxels(blocks)
+            return meshing._blocks_to_voxels(blocks)
 
-        verts, faces = mesh.mesh_from_voxels(blocks,
-                                             v_size=voxel_size,
-                                             step_size=step_size)
+        verts, faces = meshing.mesh_from_voxels(blocks,
+                                                v_size=voxel_size,
+                                                step_size=step_size)
         return verts, faces
     elif form.upper() == 'OBJ':
         # Get the key for this roi
@@ -1358,15 +1365,16 @@ def skeletonize_neuron(bodyid,
                        **kwargs):
     """Skeletonize given body.
 
-    Fetches voxels from DVID, creates a mesh (via `get_neuron`) and then
+    Fetches voxels from DVID, creates a mesh (via `mesh_neuron`) and then
     skeletonizes it. This can be useful if the precomputed skeletons are not
-    up-to-date or have corrupt topology. This function requires `skeletor` to be installed::
+    up-to-date or have corrupt topology. This function requires `skeletor` to
+    be installed::
 
       pip3 install skeletor
 
     Parameters
     ----------
-    bodyid :    int | str
+    bodyid :    int | str | trimesh
                 ID of body for which to generate skeleton.
     scale :     int | "COARSE"
                 Resolution of sparse volume to use for skeletonization.
@@ -1374,7 +1382,7 @@ def skeletonize_neuron(bodyid,
                 accurate but also more noisy (e.g. tiny free-floating fragments)
                 skeletons. In my experience, `scale="COARSE"` for quick & dirty
                 and `scale=4` for high-quality skeletons make the most sense.
-                Scales 5 and 6 are too coarse and below 2 becomes prohibitively
+                Scales 5 and 6 are too coarse, and below 3 becomes prohibitively
                 slow.
     server :    str, optional
                 If not provided, will try reading from global.
@@ -1407,25 +1415,23 @@ def skeletonize_neuron(bodyid,
     defaults.update(kwargs)
 
     # Get the sparse-vol mesh
-    mesh = get_neuron(bodyid, scale=scale,
-                      server=server, node=node,
-                      progress=progress,
-                      **defaults)
+    mesh = mesh_neuron(bodyid, scale=scale,
+                       server=server, node=node,
+                       progress=progress,
+                       **defaults)
 
     # Skeletonize
     return sk.skeletonize.by_wavefront(mesh, progress=progress)
 
 
-def get_neuron(bodyid,
-               scale='COARSE',
-               step_size=1,
-               save_to=None,
-               ret_type='MESH',
-               bbox=None,
-               server=None,
-               node=None,
-               **kwargs):
-    """Get neuron as mesh (or voxels).
+def get_sparsevol(bodyid,
+                  scale='COARSE',
+                  ret_type='INDEX',
+                  save_to=None,
+                  bbox=None,
+                  server=None,
+                  node=None):
+    """Fetch sparsevol (voxel) representation for given neuron.
 
     Parameters
     ----------
@@ -1435,16 +1441,11 @@ def get_neuron(bodyid,
                 Resolution of sparse volume starting with 0 where each level
                 beyond 0 has 1/2 resolution of previous level. "COARSE" will
                 return the volume in block coordinates.
-    step_size : int, optional
-                Step size for marching cube algorithm.
-                Higher values = faster but coarser.
     save_to :   str | None, optional
-                If provided, will not convert to verts and faces but instead
-                save as response from server as binary file.
-    ret_type :  "MESH" | "COORDS" | "INDEX" | "RAW"
-                If "MESH" will return vertices and faces. If "COORDS" will
-                return voxel coordinates. "INDEX" returns voxel indices. "RAW"
-                will return raw bytes.
+                If provided, will response from server as binary file.
+    ret_type :  "INDEX" | "COORDS" | "RAW"
+                "INDEX" returns voxel indices, "COORDS" will return voxel
+                coordinates.  "RAW" will return server response as raw bytes.
     bbox :      list | None, optional
                 Bounding box to which to restrict the query to.
                 Format: ``[x_min, x_max, y_min, y_max, z_min, z_max]``.
@@ -1452,20 +1453,15 @@ def get_neuron(bodyid,
                 If not provided, will try reading from global.
     node :      str, optional
                 If not provided, will try reading from global.
-    **kwargs
-                Keyword arguments are passed through to
-                `dv.mesh.mesh_from_voxels`.
 
 
     Returns
     -------
-    verts :     np.array
-                Vertex coordinates in nm.
-    faces :     np.array
+    voxels :    (N, 3) np.array
 
     """
-    if ret_type.upper() not in ('MESH', 'COORDS', 'INDEX', 'RAW'):
-        raise ValueError('"ret_type" must be "MESH", "COORDS" or "INDEX"')
+    if ret_type.upper() not in ('COORDS', 'INDEX', 'RAW'):
+        raise ValueError('"ret_type" must be "COORDS", "INDEX" or "RAW"')
 
     server, node, user = eval_param(server, node)
 
@@ -1518,15 +1514,76 @@ def get_neuron(bodyid,
     # Decode binary format
     header, voxels = decode.decode_sparsevol(b, format='rles')
 
-    if ret_type.upper() == 'INDEX':
-        return voxels
-    elif ret_type.upper() == 'COORDS':
-        return voxels * vsize[scale]
+    if ret_type.upper() == 'COORDS':
+        voxels *= vsize[scale]
+
+    return voxels
+
+
+def mesh_neuron(bodyid,
+                scale='COARSE',
+                step_size=1,
+                bbox=None,
+                server=None,
+                node=None,
+                **kwargs):
+    """Create mesh for given neuron.
+
+    Parameters
+    ----------
+    bodyid :    int | str
+                ID of body for which to generate mesh.
+    scale :     int | "COARSE", optional
+                Resolution of sparse volume starting with 0 where each level
+                beyond 0 has 1/2 resolution of previous level. "COARSE" will
+                return the volume in block coordinates.
+    step_size : int, optional
+                Step size for marching cube algorithm.
+                Higher values = faster but coarser.
+    bbox :      list | None, optional
+                Bounding box to which to restrict the meshing to.
+                Format: ``[x_min, x_max, y_min, y_max, z_min, z_max]``.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+    **kwargs
+                Keyword arguments are passed through to
+                `dv.meshign.mesh_from_voxels`.
+
+
+    Returns
+    -------
+    trimesh.Trimesh
+
+    See Also
+    --------
+    :func:`~dvid.fetch.get_meshes`
+                Use this to fetch precomputed meshes instead of making our own.
+
+    """
+    server, node, user = eval_param(server, node)
+
+    bodyid = utils.parse_bid(bodyid)
+
+    voxels = get_sparsevol(bodyid,
+                           scale=scale,
+                           ret_type='INDEX',
+                           save_to=None,
+                           bbox=bbox,
+                           server=server,
+                           node=node)
 
     defaults = dict(chunk_size=200 if scale in (0, 1, 2, 3, 4) else None,
                     merge_fragments=True,
                     pad_chunks=True)
     defaults.update(kwargs)
+
+    # Get voxel sizes based on scale
+    info = get_segmentation_info(server, node)['Extended']
+
+    vsize = {'COARSE': [s * 8 for s in info['BlockSize']]}
+    vsize.update({i: np.array(info['VoxelSize']) * 2**i for i in range(info['MaxDownresLevel'])})
 
     mesh = meshing.mesh_from_voxels(voxels,
                                     spacing=vsize[scale],
@@ -1536,8 +1593,9 @@ def get_neuron(bodyid,
     return mesh
 
 
+@lru_cache(None)
 def get_segmentation_info(server=None, node=None):
-    """Return segmentation info as dictionary.
+    """Return segmentation info as dictionary (cached).
 
     Parameters
     ----------
@@ -1971,8 +2029,8 @@ def snap_to_body(bodyid, positions, server=None, node=None):
     to_snap = positions[mask]
 
     # First get voxels of the coarse neuron
-    voxels = get_neuron(bodyid, scale='coarse', ret_type='INDEX',
-                        server=server, node=node) * 64
+    voxels = mesh_neuron(bodyid, scale='coarse', ret_type='INDEX',
+                         server=server, node=node) * 64
 
     # For each position find a corresponding coarse voxel
     dist = cdist(to_snap, voxels)
@@ -1985,9 +2043,9 @@ def snap_to_body(bodyid, positions, server=None, node=None):
         bbox = np.vstack([v, v]).T
         bbox[:, 1] += 63
 
-        fine = get_neuron(bodyid, scale=0, ret_type='INDEX',
-                          bbox=bbox.ravel(),
-                          server=server, node=node)
+        fine = mesh_neuron(bodyid, scale=0, ret_type='INDEX',
+                           bbox=bbox.ravel(),
+                           server=server, node=node)
 
         dist = cdist([v], fine)
 

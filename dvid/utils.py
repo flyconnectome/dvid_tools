@@ -460,8 +460,8 @@ def check_skeleton(bodyid, sample=False, node=None, server=None):
     swc_co = swc[['x', 'y', 'z']].values
 
     # Get mesh
-    mesh = fetch.get_neuron(bodyid, scale='coarse', ret_type='COORDS',
-                            node=node, server=server)
+    mesh = fetch.get_sparsevol(bodyid, scale='coarse', ret_type='COORDS',
+                               node=node, server=server)
 
     if sample:
         if sample < 1 and sample > 0:
