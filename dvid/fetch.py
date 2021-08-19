@@ -1421,7 +1421,8 @@ def skeletonize_neuron(bodyid,
                        **defaults)
 
     # Skeletonize
-    return sk.skeletonize.by_wavefront(mesh, progress=progress)
+    return sk.skeletonize.by_wavefront(mesh, radius_agg='median',
+                                       progress=progress)
 
 
 def get_sparsevol_size(bodyid, server=None, node=None):
