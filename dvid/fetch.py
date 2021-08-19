@@ -1512,25 +1512,34 @@ def get_sparsevol(bodyid,
     elif isinstance(scale, str):
         scale = scale.upper()
 
-    if not isinstance(bbox, type(None)):
-        url = urllib.parse.urljoin(server, 'api/node/{}/{}/sparsevol/{}'.format(node,
-                                                                                config.segmentation, bodyid))
-        url += '?minx={}&maxx={}&miny={}&maxy={}&minz={}&maxz={}'.format(int(bbox[0]),
-                                                                         int(bbox[1]),
-                                                                         int(bbox[2]),
-                                                                         int(bbox[3]),
-                                                                         int(bbox[4]),
-                                                                         int(bbox[5]))
-    elif scale == 'COARSE':
+    options = {}
+    if scale == 'COARSE':
         url = urllib.parse.urljoin(server, 'api/node/{}/{}/sparsevol-coarse/{}'.format(node,
                                                              config.segmentation,
                                                              bodyid))
     elif isinstance(scale, (int, np.number)):
-        url = urllib.parse.urljoin(server, 'api/node/{}/{}/sparsevol/{}?scale={}'.format(node,
+        url = urllib.parse.urljoin(server, 'api/node/{}/{}/sparsevol/{}'.format(node,
                                                                config.segmentation,
-                                                               bodyid, scale))
+                                                               bodyid))
+        options['scale'] = scale
     else:
-        raise TypeError('scale must be "COARSE" or integer, not "{}"'.format(scale))
+        raise TypeError(f'scale must be "COARSE" or integer, not "{scale}"')
+
+    if not isinstance(bbox, type(None)):
+        bbox = np.asarray(bbox).astype(int)
+        if bbox.shape != (6, ):
+            raise ValueError(f'Bounding box must be shape (6, ), got {bbox.shape}')
+        for key, co in zip(['minx', 'maxx', 'miny', 'maxy', 'minz', 'maxz'], bbox):
+            options[key] = co
+
+    if options:
+        url += '?' + '&'.join([f'{k}={v}' for k, v in options.items()])
+
+    if not isinstance(bbox, type(None)):
+        check = dvid_session().head(url)
+        if check.status_code != 200:
+            raise ValueError(f'There is no sparse volume for {bodyid} '
+                             'within the specified bounds.')
 
     r = dvid_session().get(url)
     r.raise_for_status()
