@@ -40,7 +40,7 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'locs_to_ids', 'get_n_synapses', 'get_roi', 'get_sparsevol',
            'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
            'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body',
-           'get_meshes', 'list_projects', 'get_master_node',
+           'get_meshes', 'list_projects', 'get_master_node', 'get_sparsevol_size',
            'get_sizes', 'ids_exist', 'skeletonize_neuron', 'mesh_neuron']
 
 
@@ -1422,6 +1422,40 @@ def skeletonize_neuron(bodyid,
 
     # Skeletonize
     return sk.skeletonize.by_wavefront(mesh, progress=progress)
+
+
+def get_sparsevol_size(bodyid, server=None, node=None):
+    """Fetch sparsevol (voxel) info for given neuron.
+
+    Parameters
+    ----------
+    bodyid :    int | str
+                ID of body for which to download mesh.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+
+    Returns
+    -------
+    dict
+                Dict with number of voxels and coarse bounding box in voxel
+                space.
+
+    """
+    server, node, user = eval_param(server, node)
+
+    bodyid = utils.parse_bid(bodyid)
+
+    url = urllib.parse.urljoin(server, 'api/node/{}/{}/sparsevol-size/{}'.format(node,
+                                                         config.segmentation,
+                                                         bodyid))
+
+    r = dvid_session().get(url)
+    r.raise_for_status()
+
+    return r.json()
 
 
 def get_sparsevol(bodyid,
