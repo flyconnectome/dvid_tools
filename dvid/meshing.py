@@ -9,6 +9,11 @@ from scipy.ndimage.morphology import binary_erosion, binary_fill_holes
 
 from tqdm.auto import tqdm
 
+try:
+    from fastremap import unique
+except ImportError:
+    from numpy import unique
+
 
 def mesh_from_voxels(voxels,
                      spacing,
@@ -162,41 +167,74 @@ def _mesh_from_voxels_chunked(voxels,
     offset = voxels.min(axis=0)
     voxels = voxels - offset
 
+    # Map voxels to chunks
+    chunks = (voxels / chunk_size).astype(int)
+
+    # Find the largest index
+    # max_ix = chunks.max()
+    # base = math.ceil(np.sqrt(max_ix))
+    base = 16  # 2**16=65,536 max index - this should be sufficient for chunks
+
+    # Now we encode the indices (x, y, z) chunk indices as packed integer:
+    # Each (xyz) chunk is encoded as single integer which speeds things up a lot
+    # For example chunk (1, 2, 3) becomes:
+    # N = 2 ** 16 = 65,536
+    # (1 * N ** 2) + (2 * N) + 3 = 4,295,098,371
+    # This obviously only works as long as we can still squeeze the chunks into
+    # 64bit integers but that should work out even at scale 0. If this ever
+    # becomes an issue, we could start using strings instead. For now, base 16
+    # should be enough.
+    chunks_packed = pack_array(chunks, base=base)
+
     # Find unique chunks
-    chunks, inv = np.unique((voxels / chunk_size).astype(int),
-                            return_inverse=True,
-                            axis=0)
+    chunks_unique = unique(chunks_packed)
 
     # For each chunk also find voxels that are directly adjacent (in plus direction)
-    inv_fuzzy = np.full((4, len(voxels)), fill_value=-1, dtype=int)
+    # This makes it so that each voxel can belong to multiple chunks
+    # What we want to get is an (4, N) array where for each voxel we have its
+    # "original" chunk index and its chunks when offset by -1 along each axis.
+    # original chunk -> [[1, 1, 1, 0, 0, 0, 0],
+    # offset x by -1 ->  [1, 1, 1, 1, 0, 1, 0],
+    # offset y by -1 ->  [1, 1, 1, 0, 1, 0, 0]
+    # offset z by -1 ->  [1, 1, 1, 0, 0, 0, 1]]
+    # The simple numbers (0, 1) in this example will obvs be our packed integers
+    # Later on we can then ask: "find me all voxels in chunk 0, 1, etc."
+    voxel2chunk = np.full((4, len(voxels)), fill_value=-1, dtype=int)
+    voxel2chunk[-1, :] = chunks_packed
+
+    # Find offset chunks along each axis
     for k in range(3):
-        off = [0, 0, 0]
-        off[k] = 1
-        chunks_fuzzed = ((voxels - off) / chunk_size).astype(int)
-        for i, ch in enumerate(chunks):
-            inv_fuzzy[k, np.all(chunks_fuzzed == ch, axis=1)] = i
-    inv_fuzzy[-1, :] = inv
+        # Offset chunks and pack
+        chunks_offset = voxels.copy()
+        chunks_offset[:, k] -= 1
+        chunks_offset = (chunks_offset / chunk_size).astype(int)
+        chunks_offset = pack_array(chunks_offset, base=base)
+
+        voxel2chunk[k] = chunks_offset
+
+    # Unpack the unique chunks
+    chunks_unique_unpacked = unpack_array(chunks_unique, base=base)
 
     # Generate the fragments
     fragments = []
-    end_chunks = chunks.max(axis=0)
+    end_chunks = chunks_unique_unpacked.max(axis=0)
     pad = np.array([[1, 1], [1, 1], [1, 1]])
-    for i, ch in tqdm(enumerate(chunks),
-                      total=len(chunks),
-                      disable=not progress,
-                      leave=False,
-                      desc='Meshing'):
+    for i, (ch, ix) in tqdm(enumerate(zip(chunks_unique, chunks_unique_unpacked)),
+                            total=len(chunks_unique),
+                            disable=not progress,
+                            leave=False,
+                            desc='Meshing'):
         # Pad the matrices only for the first and last chunks along each axis
         if not pad_chunks:
             pad = np.array([[0, 0], [0, 0], [0, 0]])
             for k in range(3):
-                if ch[k] == 0:
+                if ix[k] == 0:
                     pad[k][0] = 1
-                if ch[k] == end_chunks[k]:
+                if ix[k] == end_chunks[k]:
                     pad[k][1] = 1
 
         # Get voxels in this chunk
-        this_vx = voxels[np.any(inv_fuzzy == i, axis=0)]
+        this_vx = voxels[np.any(voxel2chunk == ch, axis=0)]
 
         # If only a single voxel, skip.
         if this_vx.shape[0] <= 1:
@@ -250,6 +288,26 @@ def _mesh_from_voxels_chunked(voxels,
         m.merge_vertices(digits_vertex=1)
 
     return m
+
+
+def pack_array(arr, base=8):
+    """Pack 2-d array along second axis."""
+    N = 2 ** base
+    packed = np.zeros(arr.shape, dtype='uint64')
+    packed[:, 0] = arr[:, 0] * N ** 2
+    packed[:, 1] = arr[:, 1] * N
+    packed[:, 2] = arr[:, 2]
+    return packed.sum(axis=1)
+
+
+def unpack_array(arr, base=8):
+    """Unpack 2-d array."""
+    N = 2 ** base - 1
+    unpacked = np.zeros((arr.shape[0], 3), dtype='uint64')
+    unpacked[:, 0] = (arr >> (base * 2)) & N
+    unpacked[:, 1] = (arr >> base) & N
+    unpacked[:, 2] = arr & N
+    return unpacked
 
 
 def remove_surface_voxels(voxels, **kwargs):
