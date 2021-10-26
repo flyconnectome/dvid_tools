@@ -43,7 +43,11 @@ def decode_sparsevol(b, format='rles'):
             this_run[:, 0] = np.arange(x, x + run_len)
 
             coords.append(this_run)
-        coords = np.concatenate(coords)
+
+        if len(coords):
+            coords = np.concatenate(coords)
+        else:
+            coords = np.zeros((0, 3))
         return header, coords
     elif format == 'blocks':
         raise ValueError('Format "blocks" not yet implemented.')
