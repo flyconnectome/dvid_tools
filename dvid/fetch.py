@@ -1273,8 +1273,7 @@ def get_available_rois(server=None, node=None, step_size=2):
     return r.json()
 
 
-def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
-            save_to=None, server=None, node=None):
+def get_roi(roi, step_size=2, form='MESH', save_to=None, server=None, node=None):
     """Get ROI as either mesh, voxels or ``.obj`` file.
 
     Uses marching cube algorithm to extract surface model of ROI voxels. The
@@ -1291,9 +1290,6 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
                     Name of ROI.
     form :          "MESH" | "OBJ" | "VOXELS" | "BLOCK", optional
                     Returned format - see ``Returns``.
-    voxel_size :    iterable
-                    (3, ) iterable of voxel sizes. Only relevant for
-                    ``form="MESH"``.
     step_size :     int, optional
                     Step size for marching cube algorithm. Only relevant for
                     ``form="MESH"``. Smaller values = higher resolution but
@@ -1306,22 +1302,21 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
 
     Returns
     -------
-    vertices, faces :   numpy arrays
-                        If ``format=='MESH'``. Coordinates in nm.
-    voxels :            numpy array
-                        If ``format=='VOXELS'``.
-    blocks :            numpy array
-                        If ``format=='BLOCKS'``. Encode blocks of voxels as
-                        4 coordinates: ``[z, y, x_start, x_end]``
-    OBJ :               str
-                        ``.obj`` string. Only if ``save_to=None``.
+    mesh :          trimesh.Trimesh
+                    If ``format=='MESH'``. Coordinates in nm.
+    voxels :        numpy array
+                    If ``format=='VOXELS'``.
+    blocks :        numpy array
+                    If ``format=='BLOCKS'``. Encode blocks of voxels as
+                    4 coordinates: ``[z, y, x_start, x_end]``
+    OBJ             str
+                    ``.obj`` string. Only if ``save_to=None``.
 
     """
     server, node, user = eval_param(server, node)
 
     if form.upper() in ['MESH', 'VOXELS', 'BLOCKS']:
         r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}/roi'.format(node, roi)))
-
         r.raise_for_status()
 
         # The data returned are block coordinates: [z, y, x_start, x_end]
@@ -1329,13 +1324,25 @@ def get_roi(roi, step_size=2, form='MESH', voxel_size=(32, 32, 32),
 
         if form.upper() == 'BLOCKS':
             return blocks
-        elif form.upper() == 'VOXELS':
-            return meshing._blocks_to_voxels(blocks)
 
-        verts, faces = meshing.mesh_from_voxels(blocks,
-                                                v_size=voxel_size,
-                                                step_size=step_size)
-        return verts, faces
+        voxels = meshing._blocks_to_voxels(blocks)
+
+        if form.upper() == 'VOXELS':
+            return voxels
+
+        # Try getting voxel size
+        r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}/info'.format(node, roi)))
+        r.raise_for_status()
+        meta = r.json()
+        if 'Extended' in meta and 'BlockSize' in meta['Extended']:
+            voxel_size = tuple(meta['Extended']['BlockSize'])
+        else:
+            print('No voxel size found. Mesh returned in raw voxels.')
+            voxel_size = (1, 1, 1)
+
+        return meshing.mesh_from_voxels(voxels,
+                                        spacing=voxel_size,
+                                        step_size=step_size)
     elif form.upper() == 'OBJ':
         # Get the key for this roi
         r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/rois/key/{}'.format(node, roi)))

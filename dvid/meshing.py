@@ -378,8 +378,7 @@ def _voxels_to_matrix(voxels, fill=False, pad=1, dtype=np.bool):
 
     Parameters
     ----------
-    voxels :    numpy array
-                Either voxels [[x, y, z], ..] or blocks [[z, y, x1, x2], ...]
+    voxels :    (N, 3) numpy array
     fill :      bool, optional
                 If True, will use binary fill to fill holes in matrix.
 
@@ -395,12 +394,7 @@ def _voxels_to_matrix(voxels, fill=False, pad=1, dtype=np.bool):
     offset = voxels.min(axis=0)
     voxels = voxels - offset
 
-    # Populate matrix
-    if voxels.shape[1] == 4:
-        mat = np.zeros((voxels.max(axis=0) + 1)[[-1, 1, 0]], dtype=dtype)
-        for col in voxels:
-            mat[col[2]:col[3] + 1, col[1], col[0]] = 1
-    elif voxels.shape[1] == 3:
+    if voxels.shape[1] == 3:
         mat = np.zeros((voxels.max(axis=0) + 1), dtype=dtype)
         mat[voxels[:, 0], voxels[:, 1], voxels[:, 2]] = 1
     else:
@@ -460,8 +454,34 @@ def _mask_voxels(voxels, mask_voxels):
 
 
 def _blocks_to_voxels(blocks):
-    return _matrix_to_voxels(_voxels_to_matrix(blocks))
+    """Convert blocks to voxels.
 
+    Parameters
+    ----------
+    blocks :    (N, 4) array
+                Blocks of [z, y, x1, x2].
+
+    Return
+    ------
+    voxels :    (N, 3) array
+
+    """
+    if blocks.shape[1] != 4:
+        raise ValueError(f'Expected blocks of shape (N, 4), got "{blocks.shape}"')
+
+    # Create empty array
+    n_vox = (blocks[:, 3] - blocks[:, 2] + 1)
+    voxels = np.zeros((n_vox.sum(), 3), dtype=int)
+
+    # Go over each block and populate voxels
+    start = 0
+    for i, bl in enumerate(blocks):
+        end = start + n_vox[i]
+        voxels[start:end, 1] = bl[1]
+        voxels[start:end, 2] = bl[0]
+        voxels[start:end, 0] = np.arange(bl[2], bl[3] + 1)
+        start = end
+    return voxels
 
 """
 # Generate chunk boundaries based on chunk size
