@@ -1374,7 +1374,7 @@ def skeletonize_neuron(bodyid,
 
     Fetches voxels from DVID, creates a mesh (via `mesh_neuron`) and then
     skeletonizes it. This can be useful if the precomputed skeletons are not
-    up-to-date or have corrupt topology. This function requires `skeletor` to
+    up-to-date or have incorrect topology. This function requires `skeletor` to
     be installed::
 
       pip3 install skeletor
@@ -1600,7 +1600,7 @@ def mesh_neuron(bodyid,
                 If not provided, will try reading from global.
     **kwargs
                 Keyword arguments are passed through to
-                `dv.meshign.mesh_from_voxels`.
+                `dv.meshing.mesh_from_voxels`.
 
 
     Returns

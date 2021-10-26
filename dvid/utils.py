@@ -508,7 +508,7 @@ def make_url(*args, **GET):
                 Keyword arguments are assumed to be GET request queries
                 and will be encoded in the url. For example::
 
-                    >>> make_url('http://my-server.com', 'skeleton', node_gt: 100)
+                    >>> make_url('http://my-server.com', 'skeleton', node_gt=100)
                     'http://my-server.com/skeleton?node_gt=100'
 
     Returns

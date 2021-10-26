@@ -177,7 +177,7 @@ def _mesh_from_voxels_chunked(voxels,
 
     # Now we encode the indices (x, y, z) chunk indices as packed integer:
     # Each (xyz) chunk is encoded as single integer which speeds things up a lot
-    # For example chunk (1, 2, 3) becomes:
+    # For example with base = 16, chunk (1, 2, 3) becomes:
     # N = 2 ** 16 = 65,536
     # (1 * N ** 2) + (2 * N) + 3 = 4,295,098,371
     # This obviously only works as long as we can still squeeze the chunks into
