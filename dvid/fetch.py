@@ -13,11 +13,11 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from functools import lru_cache, partial
 from requests.exceptions import HTTPError
 from scipy.spatial.distance import cdist
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from . import decode, meshing, utils, config
 
@@ -1575,15 +1575,17 @@ def mesh_neuron(bodyid,
                 scale='COARSE',
                 step_size=1,
                 bbox=None,
+                parallel=False,
+                progress=True,
                 server=None,
                 node=None,
                 **kwargs):
-    """Create mesh for given neuron.
+    """Create mesh for given neuron(s).
 
     Parameters
     ----------
-    bodyid :    int | str
-                ID of body for which to generate mesh.
+    bodyid :    int | str | list-like
+                Body ID(s) for which to generate mesh.
     scale :     int | "COARSE", optional
                 Resolution of sparse volume starting with 0 where each level
                 beyond 0 has 1/2 resolution of previous level. "COARSE" will
@@ -1594,6 +1596,13 @@ def mesh_neuron(bodyid,
     bbox :      list | None, optional
                 Bounding box to which to restrict the meshing to.
                 Format: ``[x_min, x_max, y_min, y_max, z_min, z_max]``.
+    parallel :  bool | int
+                Whether to run meshing in parallel on multiple cores if
+                `bodyid` is more than one neuron. If `parallel` is integer will
+                use that many cores. Otherwise defaults to half the available
+                cores.
+    progress :  bool
+                Whether to show a progress bar when meshing multiple neurons.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -1614,6 +1623,41 @@ def mesh_neuron(bodyid,
 
     """
     server, node, user = eval_param(server, node)
+
+    if isinstance(bodyid, (list, tuple, np.ndarray)):
+        if len(bodyid) == 1:
+            bodyid = bodyid[0]
+        else:
+            func = partial(mesh_neuron,
+                           scale=scale,
+                           step_size=step_size,
+                           bbox=bbox,
+                           server=server,
+                           node=node,
+                           **kwargs)
+
+            if not parallel:
+                return [func(b) for b in tqdm(bodyid,
+                                              desc='Meshing',
+                                              disable=not progress,
+                                              leave=False)]
+            else:
+                meshes = []
+                n_cores = parallel if isinstance(parallel, int) else max(1, int(os.n_cores() // 2))
+                with ProcessPoolExecutor(max_workers=n_cores) as executor:
+                    futures = {}
+                    for bid in bodyid:
+                        f = executor.submit(func, bid)
+                        futures[f] = bid
+
+                    with tqdm(desc='Meshing',
+                              total=len(bodyid),
+                              leave=False,
+                              disable=not progress) as pbar:
+                        for f in as_completed(futures):
+                            meshes.append(f.result())
+                            pbar.update(1)
+                return meshes
 
     bodyid = utils.parse_bid(bodyid)
 
@@ -1640,6 +1684,9 @@ def mesh_neuron(bodyid,
                                     spacing=vsize[scale],
                                     step_size=step_size,
                                     **defaults)
+
+    # Track the ID just in case
+    mesh.id = bodyid
 
     return mesh
 
