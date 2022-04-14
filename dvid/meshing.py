@@ -14,6 +14,13 @@ try:
 except ImportError:
     from numpy import unique
 
+# Newer versions of skimage have a "marching cubes" function and
+# marching_cubes_lewiner is deprecreated
+if hasattr(measure, 'marching_cubes'):
+    marching_cubes = measure.marching_cubes
+else:
+    marching_cubes = measure.marching_cubes_lewiner
+
 
 def mesh_from_voxels(voxels,
                      spacing,
@@ -101,9 +108,6 @@ def _mesh_from_voxels_single(voxels, spacing=(1, 1, 1), step_size=1):
     mat, offset = _voxels_to_matrix(voxels, pad=1)
 
     # Use marching cubes to create surface model
-    # (newer versions of skimage have a "marching cubes" function and
-    # the marching_cubes_lewiner is deprecreated)
-    marching_cubes = getattr(measure, 'marching_cubes', measure.marching_cubes_lewiner)
     verts, faces, normals, values = marching_cubes(mat,
                                                    level=.5,
                                                    step_size=step_size,
@@ -158,11 +162,6 @@ def _mesh_from_voxels_chunked(voxels,
     trimesh.Trimesh
 
     """
-    # Use marching cubes to create surface model
-    # (newer versions of skimage have a "marching cubes" function and
-    # the marching_cubes_lewiner is deprecreated)
-    marching_cubes = getattr(measure, 'marching_cubes', measure.marching_cubes_lewiner)
-
     # Strip the voxels
     offset = voxels.min(axis=0)
     voxels = voxels - offset
