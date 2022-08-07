@@ -5,7 +5,7 @@ import numpy as np
 import trimesh as tm
 
 from skimage import measure
-from scipy.ndimage.morphology import binary_erosion, binary_fill_holes
+from scipy.ndimage import binary_erosion, binary_fill_holes
 
 from tqdm.auto import tqdm
 
@@ -311,16 +311,8 @@ def unpack_array(arr, base=8):
 
 def remove_surface_voxels(voxels, **kwargs):
     """Removes surface voxels."""
-    # Use bounding boxes to keep matrix small
-    bb_min = voxels.min(axis=0)
-    #bb_max = voxels.max(axis=0)
-    #dim = bb_max - bb_min
-
-    # Voxel offset
-    voxel_off = voxels - bb_min
-
     # Generate empty array
-    mat = _voxels_to_matrix(voxel_off)
+    mat, bb_min = _voxels_to_matrix(voxels)
 
     # Erode
     mat_erode = binary_erosion(mat, **kwargs)
@@ -372,7 +364,7 @@ def parse_obj(obj):
     return np.array(verts), np.array(faces) - 1
 
 
-def _voxels_to_matrix(voxels, fill=False, pad=1, dtype=np.bool):
+def _voxels_to_matrix(voxels, fill=False, pad=1, dtype=bool):
     """Generate matrix from voxels/blocks.
 
     Parameters

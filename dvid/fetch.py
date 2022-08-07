@@ -14,6 +14,7 @@ import trimesh as tm
 import numpy as np
 import pandas as pd
 
+from io import StringIO
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from functools import lru_cache, partial
 from requests.exceptions import HTTPError
@@ -1032,8 +1033,8 @@ def get_body_position(bodyid, server=None, node=None):
 
     Parameters
     ----------
-    bodyid :    body ID
-                Body for which to find a position.
+    bodyid :    int | str
+                Body ID for which to find a position.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -1053,8 +1054,8 @@ def get_body_position(bodyid, server=None, node=None):
         return s.loc[0, ['x', 'y', 'z']].values
     else:
         # First get voxels of the coarse neuron
-        voxels = mesh_neuron(bodyid, scale='coarse', ret_type='INDEX',
-                             server=server, node=node)
+        voxels = get_sparsevol(bodyid, scale='coarse', ret_type='INDEX',
+                               server=server, node=node)
 
         # Erode surface voxels to make sure we get a central position
         while True:
@@ -1066,16 +1067,19 @@ def get_body_position(bodyid, server=None, node=None):
 
             voxels = eroded
 
+        # Get voxel sizes based on scale
+        info = get_segmentation_info(server, node)['Extended']
+
         # Now query the more precise mesh for this coarse voxel
         # Pick a random voxel
-        v = voxels[0] * 64
+        v = voxels[0] * info['BlockSize'] # turn into locs for scale 0
         # Generate a bounding bbox
         bbox = np.vstack([v, v]).T
-        bbox[:, 1] += 63
+        bbox[:, 1] += info['BlockSize']
 
-        voxels = mesh_neuron(bodyid, scale=0, ret_type='INDEX',
-                             bbox=bbox.ravel(),
-                             server=server, node=node)
+        voxels = get_sparsevol(bodyid, scale=0, ret_type='INDEX',
+                               bbox=bbox.ravel(),
+                               server=server, node=node)
 
         # Erode surface voxels again to make sure we get a central position
         while True:
@@ -1249,27 +1253,27 @@ def get_available_rois(server=None, node=None, step_size=2):
 
 
 def get_roi(roi, step_size=2, form='MESH', save_to=None, server=None, node=None):
-    """Get ROI as either mesh, voxels or ``.obj`` file.
+    """Get ROI as mesh or voxels.
 
-    Uses marching cube algorithm to extract surface model of ROI voxels. The
-    ``.obj`` files are precomputed on the server.
+    Uses marching cube algorithm to extract surface model of ROI voxels if no
+    precomputed mesh available.
 
-    Important
-    ---------
-    Please note that some ROIs exist only as voxels or as ``.obj``. In that
-    case function will raise "Bad Request" HttpError.
+    Note that some ROIs exist only as voxels or as mesh. If voxels are requested
+    but not available, will raise "Bad Request" HttpError.
 
     Parameters
     ----------
     roi :           str
                     Name of ROI.
-    form :          "MESH" | "OBJ" | "VOXELS" | "BLOCK", optional
+    form :          "MESH" | "VOXELS"| "BLOCKS", optional
                     Returned format - see ``Returns``.
     step_size :     int, optional
                     Step size for marching cube algorithm. Only relevant for
                     ``form="MESH"``. Smaller values = higher resolution but
                     slower.
     save_to :       filename
+                    If provided will also write mesh straight to file. Should
+                    end with `.obj`.
     server :        str, optional
                     If not provided, will try reading from global.
     node :          str, optional
@@ -1284,59 +1288,67 @@ def get_roi(roi, step_size=2, form='MESH', save_to=None, server=None, node=None)
     blocks :        numpy array
                     If ``format=='BLOCKS'``. Encode blocks of voxels as
                     4 coordinates: ``[z, y, x_start, x_end]``
-    OBJ             str
-                    ``.obj`` string. Only if ``save_to=None``.
 
     """
+    if form.upper() not in ('MESH', 'VOXELS', 'BLOCKS'):
+        raise ValueError('Unknown return format "{}"'.format(form))
+
     server, node, user = eval_param(server, node)
 
-    if form.upper() in ['MESH', 'VOXELS', 'BLOCKS']:
-        r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}/roi'.format(node, roi)))
-        r.raise_for_status()
+    if form.upper() == 'MESH':
+        # Check if we can get the OBJ file directly
+        try:
+            # Get the key for this roi
+            r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/rois/key/{}'.format(node, roi)))
+            r.raise_for_status()
+            key = r.json()['->']['key']
 
-        # The data returned are block coordinates: [z, y, x_start, x_end]
-        blocks = np.array(r.json())
+            # Get the obj string
+            r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/roi_data/key/{}'.format(node, key)))
+            r.raise_for_status()
 
-        if form.upper() == 'BLOCKS':
-            return blocks
+            if save_to:
+                with open(save_to, 'w') as f:
+                    f.write(r.text)
+                return
 
-        voxels = meshing._blocks_to_voxels(blocks)
+            # The data returned is in .obj format
+            return tm.load(StringIO(r.text), file_type='obj')
+        except BaseException:
+            if r.status_code != 400:
+                raise
 
-        if form.upper() == 'VOXELS':
-            return voxels
+    # Get the voxels
+    r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}/roi'.format(node, roi)))
+    r.raise_for_status()
 
-        # Try getting voxel size
-        r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}/info'.format(node, roi)))
-        r.raise_for_status()
-        meta = r.json()
-        if 'Extended' in meta and 'BlockSize' in meta['Extended']:
-            voxel_size = tuple(meta['Extended']['BlockSize'])
-        else:
-            print('No voxel size found. Mesh returned in raw voxels.')
-            voxel_size = (1, 1, 1)
+    # The data returned are block coordinates: [z, y, x_start, x_end]
+    blocks = np.array(r.json())
 
-        return meshing.mesh_from_voxels(voxels,
-                                        spacing=voxel_size,
-                                        step_size=step_size)
-    elif form.upper() == 'OBJ':
-        # Get the key for this roi
-        r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/rois/key/{}'.format(node, roi)))
-        r.raise_for_status()
-        key = r.json()['->']['key']
+    if form.upper() == 'BLOCKS':
+        return blocks
 
-        # Get the obj string
-        r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/roi_data/key/{}'.format(node, key)))
-        r.raise_for_status()
+    voxels = meshing._blocks_to_voxels(blocks)
 
-        if save_to:
-            with open(save_to, 'w') as f:
-                f.write(r.text)
-            return
+    if form.upper() == 'VOXELS':
+        return voxels
 
-        # The data returned is in .obj format
-        return r.text
+    # Try getting voxel size
+    meta = get_segmentation_info(node=node, server=server)
+    if 'Extended' in meta and 'BlockSize' in meta['Extended']:
+        voxel_size = tuple(meta['Extended']['BlockSize'])
     else:
-        raise ValueError('Unknown return format "{}"'.format(form))
+        print('No voxel size found. Mesh returned in raw voxels.')
+        voxel_size = (1, 1, 1)
+
+    mesh = meshing.mesh_from_voxels(voxels,
+                                    spacing=voxel_size,
+                                    step_size=step_size)
+
+    if save_to:
+        mesh.export(save_to)
+
+    return mesh
 
 
 def skeletonize_neuron(bodyid,
@@ -1463,14 +1475,15 @@ def get_sparsevol(bodyid,
                 beyond 0 has 1/2 resolution of previous level. "COARSE" will
                 return the volume in block coordinates.
     save_to :   str | None, optional
-                If provided, will response from server as binary file.
+                If provided, will save response from server as binary file.
     ret_type :  "INDEX" | "COORDS" | "RAW"
                 "INDEX" returns x/y/z indices. "COORDS" returns x/y/z
                 coordinates. "RAW" will return server response as raw bytes.
     voxels :    bool
                 If False, will return x/y/z/x_run_length instead of x/y/z voxels.
     bbox :      list | None, optional
-                Bounding box to which to restrict the query to.
+                Bounding box to which to restrict the query to. Must be in
+                `scale=0` index coordinates.
                 Format: ``[x_min, x_max, y_min, y_max, z_min, z_max]``.
     server :    str, optional
                 If not provided, will try reading from global.
@@ -1583,7 +1596,8 @@ def mesh_neuron(bodyid,
                 Step size for marching cube algorithm.
                 Higher values = faster but coarser.
     bbox :      list | None, optional
-                Bounding box to which to restrict the meshing to.
+                Bounding box to which to restrict the meshing to. Must be in
+                `scale=0` coordinates.
                 Format: ``[x_min, x_max, y_min, y_max, z_min, z_max]``.
     parallel :  bool | int
                 Whether to run meshing in parallel on multiple cores if
@@ -2116,8 +2130,12 @@ def snap_to_body(bodyid, positions, server=None, node=None):
     to_snap = positions[mask]
 
     # First get voxels of the coarse neuron
-    voxels = mesh_neuron(bodyid, scale='coarse', ret_type='INDEX',
-                         server=server, node=node) * 64
+    voxels = get_sparsevol(bodyid, scale='coarse', ret_type='INDEX',
+                           server=server, node=node)
+
+    # Get voxel sizes based on scale
+    info = get_segmentation_info(server, node)['Extended']
+    voxels = voxels * info['BlockSize']
 
     # For each position find a corresponding coarse voxel
     dist = cdist(to_snap, voxels)
@@ -2126,13 +2144,13 @@ def snap_to_body(bodyid, positions, server=None, node=None):
     # Now query the more precise mesh for these coarse voxels
     snapped = []
     for v in tqdm(closest, leave=False, desc='Snapping'):
-        # Generate a bounding bbox
+        # Generate a bounding bbox to only fetch the voxels we actually need
         bbox = np.vstack([v, v]).T
-        bbox[:, 1] += 63
+        bbox[:, 1] += info['BlockSize']
 
-        fine = mesh_neuron(bodyid, scale=0, ret_type='INDEX',
-                           bbox=bbox.ravel(),
-                           server=server, node=node)
+        fine = get_sparsevol(bodyid, scale=0, ret_type='INDEX',
+                             bbox=bbox.ravel(),
+                             server=server, node=node)
 
         dist = cdist([v], fine)
 
