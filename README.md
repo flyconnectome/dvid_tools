@@ -1,4 +1,4 @@
-[![Documentation Status](https://readthedocs.org/projects/dvidtools/badge/?version=latest)](http://dvidtools.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/dvidtools/badge/?version=latest)](http://dvidtools.readthedocs.io/en/latest/?badge=latest)[![Tests](https://github.com/flyconnectome/dvid_tools/actions/workflows/test-package.yml/badge.svg)](https://github.com/flyconnectome/dvid_tools/actions/workflows/test-package.yml)
 
 # dvidtools
 Python tools to fetch data from [DVID](https://github.com/janelia-flyem/dvid) servers.
