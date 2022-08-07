@@ -1042,7 +1042,7 @@ def get_body_position(bodyid, server=None, node=None):
     """
     bodyid = utils.parse_bid(bodyid)
 
-    s = get_skeletons(bodyid, server=server, node=node, verbose=False)
+    s = get_skeletons(bodyid, server=server, node=node)
 
     if isinstance(s, pd.DataFrame) and not s.empty:
         # Return the root (more likely to be actually within the mesh?)
