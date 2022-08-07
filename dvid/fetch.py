@@ -498,16 +498,16 @@ def __old_get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
             raise ValueError('"save_to" must be path when loading multiple'
                              'multiple bodies')
         resp = {x: __old_get_skeleton(x,
-                                save_to=save_to,
-                                check_mutation=check_mutation,
-                                verbose=verbose,
-                                heal=heal,
-                                soma=soma,
-                                xform=xform,
-                                server=server,
-                                node=node,
-                                **kwargs) for x in tqdm(bodyid,
-                                                        desc='Loading')}
+                                      save_to=save_to,
+                                      check_mutation=check_mutation,
+                                      verbose=verbose,
+                                      heal=heal,
+                                      soma=soma,
+                                      xform=xform,
+                                      server=server,
+                                      node=node,
+                                      **kwargs) for x in tqdm(bodyid,
+                                                              desc='Loading')}
         # Give summary
         missing = [str(k) for k, v in resp.items() if isinstance(v, type(None))]
         print('{}/{} skeletons successfully downloaded.'.format(len(resp) - len(missing),
@@ -525,9 +525,9 @@ def __old_get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
     server, node, user = eval_param(server, node)
 
     r = dvid_session().get(urllib.parse.urljoin(server,
-         'api/node/{}/{}_skeletons/key/{}_swc'.format(node,
-                                                      config.segmentation,
-                                                      bodyid)))
+                                                'api/node/{}/{}_skeletons/key/{}_swc'.format(node,
+                                                                                             config.segmentation,
+                                                                                             bodyid)))
 
     if 'not found' in r.text:
         if verbose:
@@ -659,8 +659,8 @@ def get_user_bookmarks(server=None, node=None, user=None,
     server, node, user = eval_param(server, node, user)
 
     r = dvid_session().get(urllib.parse.urljoin(server,
-         'api/node/{}/bookmark_annotations/tag/user:{}'.format(node,
-                                                      user)))
+                                                'api/node/{}/bookmark_annotations/tag/user:{}'.format(node,
+                                                                                                      user)))
 
     if return_dataframe:
         data = r.json()
@@ -723,8 +723,8 @@ def add_bookmarks(data, verify=True, server=None, node=None):
         utils.verify_payload(data, required=required, required_only=True)
 
     r = dvid_session().post(urllib.parse.urljoin(server,
-         'api/node/{}/bookmark_annotations/elements'.format(node)),
-         json=data)
+                                                 'api/node/{}/bookmark_annotations/elements'.format(node)),
+                            json=data)
 
     r.raise_for_status()
 
@@ -753,9 +753,9 @@ def get_annotation(bodyid, server=None, node=None, verbose=True):
     server, node, user = eval_param(server, node)
 
     r = dvid_session().get(urllib.parse.urljoin(server,
-         'api/node/{}/{}_annotations/key/{}'.format(node,
-                                                    config.body_labels,
-                                                    bodyid)))
+                                                'api/node/{}/{}_annotations/key/{}'.format(node,
+                                                                                           config.body_labels,
+                                                                                           bodyid)))
 
     try:
         return r.json()
@@ -829,10 +829,10 @@ def edit_annotation(bodyid, annotation, server=None, node=None, verbose=True):
     old_an.update(annotation)
 
     r = dvid_session().post(urllib.parse.urljoin(server,
-            'api/node/{}/{}_annotations/key/{}'.format(node,
-                                                       config.body_labels,
-                                                       bodyid)),
-            json=old_an)
+                                                 'api/node/{}/{}_annotations/key/{}'.format(node,
+                                                                                            config.body_labels,
+                                                                                            bodyid)),
+                            json=old_an)
 
     # Check if it worked
     r.raise_for_status()
@@ -860,10 +860,10 @@ def __old_get_body_id(pos, server=None, node=None):
     server, node, user = eval_param(server, node)
 
     r = dvid_session().get(urllib.parse.urljoin(server,
-                           'api/node/{}/{}/label/{}_{}_{}'.format(node,
-                                                                  config.segmentation,
-                                                                  pos[0], pos[1],
-                                                                  pos[2])))
+                                                'api/node/{}/{}/label/{}_{}_{}'.format(node,
+                                                                                       config.segmentation,
+                                                                                       pos[0], pos[1],
+                                                                                       pos[2])))
 
     return r.json()['Label']
 
@@ -1108,9 +1108,9 @@ def get_body_profile(bodyid, server=None, node=None):
     bodyid = utils.parse_bid(bodyid)
 
     r = dvid_session().get(urllib.parse.urljoin(server,
-                           "api/node/{}/{}/sparsevol-size/{}".format(node,
-                                                                     config.segmentation,
-                                                                     bodyid)))
+                                                "api/node/{}/{}/sparsevol-size/{}".format(node,
+                                                                                          config.segmentation,
+                                                                                          bodyid)))
     r.raise_for_status()
 
     return r.json()
@@ -1156,14 +1156,14 @@ def get_assignment_status(pos, window=None, bodyid=None, server=None, node=None)
         window = window if isinstance(window, np.ndarray) else np.array(window)
 
         r = dvid_session().get(urllib.parse.urljoin(server,
-                               'api/node/{}/bookmarks/keyrange/'
-                               '{}_{}_{}/{}_{}_{}'.format(node,
-                                                          int(pos[0]-window[0]/2),
-                                                          int(pos[1]-window[1]/2),
-                                                          int(pos[2]-window[2]/2),
-                                                          int(pos[0]+window[0]/2),
-                                                          int(pos[1]+window[1]/2),
-                                                          int(pos[2]+window[2]/2),)))
+                                                    'api/node/{}/bookmarks/keyrange/'
+                                                    '{}_{}_{}/{}_{}_{}'.format(node,
+                                                                               int(pos[0]-window[0]/2),
+                                                                               int(pos[1]-window[1]/2),
+                                                                               int(pos[2]-window[2]/2),
+                                                                               int(pos[0]+window[0]/2),
+                                                                               int(pos[1]+window[1]/2),
+                                                                               int(pos[2]+window[2]/2),)))
         r.raise_for_status()
 
         # Above query returns coordinates that are in lexicographically
@@ -1196,10 +1196,10 @@ def get_assignment_status(pos, window=None, bodyid=None, server=None, node=None)
                                       server=server,
                                       node=node) for c in coords]
     r = dvid_session().get(urllib.parse.urljoin(server,
-                           'api/node/{}/bookmarks/key/{}_{}_{}'.format(node,
-                                                                        int(pos[0]),
-                                                                        int(pos[1]),
-                                                                        int(pos[2]))))
+                                                'api/node/{}/bookmarks/key/{}_{}_{}'.format(node,
+                                                                                            int(pos[0]),
+                                                                                            int(pos[1]),
+                                                                                            int(pos[2]))))
 
     # Will raise if key not found -> so just don't
     # r.raise_for_status()
@@ -1229,15 +1229,15 @@ def get_labels_in_area(offset, size, server=None, node=None):
     server, node, user = eval_param(server, node)
 
     r = dvid_session().get(urllib.parse.urljoin(server,
-                           'api/node/{}/{}_todo/elements/'
-                           '{}_{}_{}/{}_{}_{}'.format(node,
-                                                      config.segmentation,
-                                                      int(size[0]),
-                                                      int(size[1]),
-                                                      int(size[2]),
-                                                      int(offset[0]),
-                                                      int(offset[1]),
-                                                      int(offset[2]))))
+                                                'api/node/{}/{}_todo/elements/'
+                                                '{}_{}_{}/{}_{}_{}'.format(node,
+                                                                           config.segmentation,
+                                                                           int(size[0]),
+                                                                           int(size[1]),
+                                                                           int(size[2]),
+                                                                           int(offset[0]),
+                                                                           int(offset[1]),
+                                                                           int(offset[2]))))
 
     r.raise_for_status()
 
@@ -1267,7 +1267,7 @@ def get_available_rois(server=None, node=None, step_size=2):
     server, node, user = eval_param(server, node)
 
     r = dvid_session().get(urllib.parse.urljoin(server,
-                           'api/node/{}/rois/keys'.format(node)))
+                                                'api/node/{}/rois/keys'.format(node)))
 
     r.raise_for_status()
 
@@ -1461,8 +1461,8 @@ def get_sparsevol_size(bodyid, server=None, node=None):
     bodyid = utils.parse_bid(bodyid)
 
     url = urllib.parse.urljoin(server, 'api/node/{}/{}/sparsevol-size/{}'.format(node,
-                                                         config.segmentation,
-                                                         bodyid))
+                                                                                 config.segmentation,
+                                                                                 bodyid))
 
     r = dvid_session().get(url)
     r.raise_for_status()
@@ -1752,14 +1752,14 @@ def get_n_synapses(bodyid, server=None, node=None):
         return pd.DataFrame.from_records(syn).T
 
     r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}_labelsz/count/{}/PreSyn'.format(node,
-                                                                        config.synapses,
-                                                                        bodyid)))
+                                                                                                        config.synapses,
+                                                                                                        bodyid)))
     r.raise_for_status()
     pre = r.json()
 
     r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}_labelsz/count/{}/PostSyn'.format(node,
-                                                                         config.synapses,
-                                                                         bodyid)))
+                                                                                                         config.synapses,
+                                                                                                         bodyid)))
     r.raise_for_status()
     post = r.json()
 
@@ -1799,7 +1799,7 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
     """
     if isinstance(bodyid, (list, np.ndarray)):
         tables = [get_synapses(b, pos_filter, server, node) for b in tqdm(bodyid,
-                                                              desc='Fetching')]
+                                                                          desc='Fetching')]
         for b, tbl in zip(bodyid, tables):
             tbl['bodyid'] = b
         return pd.concat(tables, axis=0)
@@ -1809,7 +1809,7 @@ def get_synapses(bodyid, pos_filter=None, with_details=False, server=None, node=
     bodyid = utils.parse_bid(bodyid)
 
     r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}/label/{}?relationships={}'.format(node,
-                                                                config.synapses, bodyid, str(with_details).lower())))
+                                                                                                          config.synapses, bodyid, str(with_details).lower())))
 
     syn = r.json()
 
@@ -2196,8 +2196,8 @@ def get_last_mod(bodyid, server=None, node=None):
     server, node, user = eval_param(server, node)
 
     r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}/lastmod/{}'.format(node,
-                                                                 config.segmentation,
-                                                                 bodyid)))
+                                                                                           config.segmentation,
+                                                                                           bodyid)))
     r.raise_for_status()
 
     return r.json()
@@ -2240,8 +2240,8 @@ def get_skeleton_mutation(bodyid, server=None, node=None):
     server, node, user = eval_param(server, node)
 
     r = dvid_session().get(urllib.parse.urljoin(server, 'api/node/{}/{}_skeletons/key/{}_swc'.format(node,
-                                                                           config.segmentation,
-                                                                           bodyid)))
+                                                                                                     config.segmentation,
+                                                                                                     bodyid)))
 
     if 'not found' in r.text:
         print(r.text)

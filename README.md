@@ -6,7 +6,7 @@ Python tools to fetch data from [DVID](https://github.com/janelia-flyem/dvid) se
 Find the documentation [here](https://dvidtools.readthedocs.io).
 
 Want to query a neuPrint server instead? Check out
-[neuprint-python](https://github.com/connectome-neuprint/neuprint-python) instead.
+[neuprint-python](https://github.com/connectome-neuprint/neuprint-python).
 
 ## What can `dvidtools` do for you?
 
@@ -18,7 +18,7 @@ Want to query a neuPrint server instead? Check out
 - get connectivity (adjacency matrix, connectivity table)
 - retrieve labels (TODO, to split, etc)
 - map positions to body IDs
-- mesh and/or skeletonize sparsevols
+- mesh or skeletonize sparsevols
 - detect potential open ends (based on a script by [Stephen Plaza](https://github.com/stephenplaza))
 
 ## Install
