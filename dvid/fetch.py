@@ -90,16 +90,20 @@ def setup(server=None, node=None, user=None):
             globals()[n] = p
 
 
-def eval_param(server=None, node=None, user=None):
+def eval_param(server=None, node=None, user=None, raise_missing=True):
     """Parse parameters and fall back to globally defined values."""
-    parsed = {}
+    parsed = []
     for p, n in zip([server, node, user], ['server', 'node', 'user']):
         if isinstance(p, type(None)):
-            parsed[n] = globals().get(n, None)
+            parsed.append(globals().get(n, None))
         else:
-            parsed[n] = p
+            parsed.append(p)
 
-    return [parsed[n] for n in ['server', 'node', 'user']]
+    if raise_missing and not parsed[0]:
+        raise ValueError('Must provide `server` (and probably `node`) either '
+                         'explicitly or globally via `dvid.setup()`')
+
+    return parsed
 
 
 def get_meshes(x, fix=True, output='auto', on_error='warn',
