@@ -27,5 +27,8 @@ jobs:
     - name: Install dvidtools
       run: pip install -e .
     - name: Test
+      env:
+          DVID_TEST_SERVER: ${{ secrets.dvid_test_server }}
+          DVID_TEST_NODE: ${{ secrets.dvid_test_node }}        
       run: |
         pytest --verbose
