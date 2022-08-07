@@ -36,7 +36,7 @@ DEFAULT_APPNAME = "dvidtools"
 
 __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation',
            'get_assignment_status', 'get_available_rois',
-           'get_body_position', 'get_body_profile', 'get_connections',
+           'get_body_position', 'get_connections',
            'get_connectivity', 'get_labels_in_area', 'get_last_mod',
            'locs_to_ids', 'get_n_synapses', 'get_roi', 'get_sparsevol',
            'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
@@ -1088,36 +1088,6 @@ def get_body_position(bodyid, server=None, node=None):
             voxels = eroded
 
         return voxels[0]
-
-
-def get_body_profile(bodyid, server=None, node=None):
-    """Get body profile (N voxels, N blocks, bounding box).
-
-    Parameters
-    ----------
-    bodid :     str | int
-                Body id.
-    server :    str, optional
-                If not provided, will try reading from global.
-    node :      str, optional
-                If not provided, will try reading from global.
-
-    Returns
-    -------
-    profile :   dict
-
-    """
-    server, node, user = eval_param(server, node)
-
-    bodyid = utils.parse_bid(bodyid)
-
-    r = dvid_session().get(urllib.parse.urljoin(server,
-                                                "api/node/{}/{}/sparsevol-size/{}".format(node,
-                                                                                          config.segmentation,
-                                                                                          bodyid)))
-    r.raise_for_status()
-
-    return r.json()
 
 
 def get_assignment_status(pos, window=None, bodyid=None, server=None, node=None):
