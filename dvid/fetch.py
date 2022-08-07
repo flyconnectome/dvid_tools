@@ -10,6 +10,7 @@ import threading
 import urllib
 import warnings
 
+import trimesh as tm
 import numpy as np
 import pandas as pd
 
@@ -1422,10 +1423,13 @@ def skeletonize_neuron(bodyid,
     defaults.update(kwargs)
 
     # Get the sparse-vol mesh
-    mesh = mesh_neuron(bodyid, scale=scale,
-                       server=server, node=node,
-                       progress=progress,
-                       **defaults)
+    if isinstance(bodyid, tm.Trimesh):
+        mesh = bodyid
+    else:
+        mesh = mesh_neuron(bodyid, scale=scale,
+                           server=server, node=node,
+                           progress=progress,
+                           **defaults)
 
     # Skeletonize
     return sk.skeletonize.by_wavefront(mesh, radius_agg='median',
