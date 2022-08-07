@@ -1473,6 +1473,7 @@ def get_sparsevol_size(bodyid, server=None, node=None):
 def get_sparsevol(bodyid,
                   scale='COARSE',
                   ret_type='INDEX',
+                  voxels=True,
                   save_to=None,
                   bbox=None,
                   server=None,
@@ -1490,8 +1491,10 @@ def get_sparsevol(bodyid,
     save_to :   str | None, optional
                 If provided, will response from server as binary file.
     ret_type :  "INDEX" | "COORDS" | "RAW"
-                "INDEX" returns voxel indices, "COORDS" will return voxel
-                coordinates.  "RAW" will return server response as raw bytes.
+                "INDEX" returns x/y/z indices. "COORDS" returns x/y/z
+                coordinates. "RAW" will return server response as raw bytes.
+    voxels :    bool
+                If False, will return x/y/z/x_run_length instead of x/y/z voxels.
     bbox :      list | None, optional
                 Bounding box to which to restrict the query to.
                 Format: ``[x_min, x_max, y_min, y_max, z_min, z_max]``.
@@ -1504,6 +1507,12 @@ def get_sparsevol(bodyid,
     Returns
     -------
     voxels :    (N, 3) np.array
+                If ``voxels=True``: array with x/y/z coordinates/indices
+    rles :      (N, 4) np.array
+                If ``voxels=False``: array with x/y/z/x_run_length
+                coordinates/indices.
+    raw :       bytes string
+                If ``ret_type='RAW'``: server response as raw bytes.
 
     """
     if ret_type.upper() not in ('COORDS', 'INDEX', 'RAW'):
@@ -1527,12 +1536,12 @@ def get_sparsevol(bodyid,
     options = {}
     if scale == 'COARSE':
         url = urllib.parse.urljoin(server, 'api/node/{}/{}/sparsevol-coarse/{}'.format(node,
-                                                             config.segmentation,
-                                                             bodyid))
+                                                                                       config.segmentation,
+                                                                                       bodyid))
     elif isinstance(scale, (int, np.number)):
         url = urllib.parse.urljoin(server, 'api/node/{}/{}/sparsevol/{}'.format(node,
-                                                               config.segmentation,
-                                                               bodyid))
+                                                                                config.segmentation,
+                                                                                bodyid))
         options['scale'] = scale
     else:
         raise TypeError(f'scale must be "COARSE" or integer, not "{scale}"')
@@ -1567,10 +1576,12 @@ def get_sparsevol(bodyid,
         return b
 
     # Decode binary format
-    header, voxels = decode.decode_sparsevol(b, format='rles')
+    header, voxels = decode.decode_sparsevol(b, format='rles', voxels=voxels)
 
     if ret_type.upper() == 'COORDS':
-        voxels *= vsize[scale]
+        voxels = voxels[:, :3] * vsize[scale]
+        if voxels.shape[1] == 4:
+            voxels[:, 4] *= vsize[scale][0]
 
     return voxels
 
