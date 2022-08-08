@@ -39,6 +39,7 @@ pip install git+git://github.com/flyconnectome/dvid_tools@master
 - scipy
 - requests
 - networkx
+- trimesh
 
 Above dependencies will be installed automatically. If you plan to use the tip
 detector with classifier-derived confidence, you will also need
@@ -56,3 +57,13 @@ pip3 install skeletor
 
 ## Examples
 Please see the [documentation](https://dvidtools.readthedocs.io) for examples.
+
+## Testing
+
+For testing you need to have two environment variables set: `DVID_TEST_SERVER`
+and `DVID_TEST_NODE`. These should point to a DVID server/node that contain
+the Janelia hemibrain dataset. Then run:
+
+```bash
+$ pytest -v
+```
