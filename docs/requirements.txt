@@ -2,4 +2,6 @@
 nbsphinx
 numpydoc
 sphinx_bootstrap_theme
-sphinx==1.8.4
+sphinx>=3.1
+wheel>=0.35.1
+setuptools==57.5.0

@@ -32,13 +32,19 @@ Reading/Writing Data
     get_segmentation_info
     get_sizes
     get_skeletons
+    get_skeleton_mutation
     get_sparsevol
+    get_sparsevol_size
     get_synapses
     get_user_bookmarks
     mesh_neuron
     setup
     skeletonize_neuron
+    snap_to_body
     locs_to_ids
+    list_projects
+    ids_exist
+
 
 Tools
 +++++
