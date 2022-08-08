@@ -13,7 +13,7 @@ Make sure you have `Python 3 <https://www.python.org>`_,
 
 ::
 
-    pip install git+git://github.com/flyconnectome/dvid_tools@master
+    pip install git+https://github.com/flyconnectome/dvid_tools@master
 
 If you plan to use the :func:`tip detector <dvidtools.tip.detect_tips>` with
 classifier-derived confidence, you will also need
@@ -54,7 +54,7 @@ Setting up
     node = '54f7'
     user = 'schlegelp'
 
-    dv.set_param(server, node, user)
+    dv.setup(server, node, user)
 
 
 Get user bookmarks and add annotations
@@ -71,7 +71,9 @@ Fetch precomputed skeleton for a single neuron and save as SWC
 ::
 
     body_id = '1700937093'
-    dv.get_skeleton(body_id, save_to=body_id + '.swc')
+    swc = dv.get_skeletons(body_id)
+    # Alternatively, save straight to disk
+    _ = dv.get_skeletons(body_id, save_to=body_id + '.swc')
 
 
 Get table of synapse locations

@@ -28,7 +28,7 @@ Make sure you have [Python 3](https://www.python.org) (3.6 or later),
 [git](https://git-scm.com) installed. Then run this in terminal:
 
 ```shell
-pip install git+git://github.com/flyconnectome/dvid_tools@master
+pip install git+https://github.com/flyconnectome/dvid_tools@master
 ```
 
 ## Dependencies
