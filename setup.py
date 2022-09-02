@@ -29,6 +29,10 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/flyconnectome/dvid_tools',
+    project_urls={
+         "Documentation": "https://dvidtools.readthedocs.io",
+         "Source": "https://github.com/flyconnectome/dvid_tools",
+        },
     author='Philipp Schlegel',
     author_email='pms70@cam.ac.uk',
     keywords='DVID API fetch neuron segmentation',
@@ -41,8 +45,11 @@ setup(
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
 
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
     ],
     install_requires=requirements,
     python_requires='>=3.6',

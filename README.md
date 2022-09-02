@@ -24,26 +24,23 @@ Want to query a neuPrint server instead? Check out
 ## Install
 
 Make sure you have [Python 3](https://www.python.org) (3.6 or later),
-[pip](https://pip.pypa.io/en/stable/installing/) and
-[git](https://git-scm.com) installed. Then run this in terminal:
+[pip](https://pip.pypa.io/en/stable/installing/). Then run this:
 
-```shell
-pip install git+https://github.com/flyconnectome/dvid_tools@master
+```bash
+pip3 install dvidtools
 ```
 
-## Dependencies
-- numpy
-- pandas
-- scikit-image
-- tqdm
-- scipy
-- requests
-- networkx
-- trimesh
+To install the dev version straight from Github:
 
-Above dependencies will be installed automatically. If you plan to use the tip
-detector with classifier-derived confidence, you will also need
-[sciki-learn](https://scikit-learn.org):
+```bash
+pip3 install git+https://github.com/flyconnectome/dvid_tools@master
+```
+
+## Optional dependencies
+Necessary dependencies will be installed automatically.
+
+If you plan to use the tip detector with classifier-derived confidence, you
+will also need [sciki-learn](https://scikit-learn.org):
 
 ```shell
 pip3 install scikit-learn
