@@ -43,7 +43,8 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
            'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body',
            'get_meshes', 'list_projects', 'get_master_node', 'get_sparsevol_size',
-           'get_sizes', 'ids_exist', 'skeletonize_neuron', 'mesh_neuron']
+           'get_sizes', 'ids_exist', 'skeletonize_neuron', 'mesh_neuron',
+           'find_lost_ids', 'update_ids', "get_branch_history"]
 
 
 def dvid_session(appname=DEFAULT_APPNAME, user=None):
@@ -761,7 +762,6 @@ def get_annotation(bodyid, server=None, node=None, verbose=True):
                                                 'api/node/{}/{}_annotations/key/{}'.format(node,
                                                                                            config.body_labels,
                                                                                            bodyid)))
-
     try:
         return r.json()
     except BaseException:
@@ -2301,6 +2301,29 @@ def get_master_node(id, server=None):
                     ID of master node.
 
     """
+    return get_branch_history(id=id, branch='master', server=server)[0]
+
+
+def get_branch_history(id, branch='master', server=None):
+    """Get list of version UUIDs for the given branch name.
+
+    Starts with the current leaf and works back to the root.
+
+    Parameters
+    ----------
+    id :            str
+                    UUID of a node in the branch to trace.
+    branch :        str
+                    Which branch to follow.
+    server :        str, optional
+                    If not provided will fall back to globally defined server.
+
+    Returns
+    -------
+    uuids :         list of str
+                    IDs sorted from current head to root.
+
+    """
     server, _, _ = eval_param(server)
 
     url = utils.make_url(server, f'api/repo/{id}/branch-versions/master')
@@ -2314,4 +2337,115 @@ def get_master_node(id, server=None):
     except BaseException:
         raise
 
-    return r.json()[0]
+    return r.json()
+
+
+def find_lost_ids(bodyid, branch='master', progress=True, server=None, node=None):
+    """Find the last occurrence of given body ID(s).
+
+    Parameters
+    ----------
+    bodyid :    int | list thereof
+                Body ID(s) to search for.
+    branch :    str
+                Which branch of the tree to track.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    """
+    server, node, user = eval_param(server, node)
+
+    if isinstance(bodyid, int):
+        bodyid = [bodyid]
+
+    bodyid = np.asarray(bodyid).astype(int)
+
+    # Get node history
+    hist = get_branch_history(id=node, server=server, branch=branch)
+
+    last_seen = np.full(len(bodyid), None)
+    miss = last_seen == None
+    for n in tqdm(hist, desc='Searching', leave=False, disable=not progress):
+        ex = ids_exist(bodyid[miss], progress=False, node=n, server=server)
+        last_seen[np.where(miss)[0][ex]] = n
+
+        miss = last_seen == None
+        if not any(miss):
+            break
+
+    return last_seen
+
+
+def update_ids(bodyid, scale=3, sample=.01,
+               progress=True, server=None, node=None):
+    """Update (lost) body ID(s).
+
+    The way this work is:
+        1. Find the last node that an ID was seen in.
+        2. Get the coarse voxels for that neuron.
+        3. Find the body ID corresponding to those coarse voxels in given node.
+
+    Parameters
+    ----------
+    bodyid :    int | list thereof
+                Body ID(s) to update.
+    scale :     int | "coarse"
+                Which scale to use. Lower = more accurate but slower.
+    sample :    float [0-1], optional
+                If float between 0 and 1 we will only check a fraction of the
+                voxels (faster).
+    branch :    str
+                Which branch of the tree to track.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    """
+    server, node, user = eval_param(server, node)
+
+    if isinstance(bodyid, int):
+        bodyid = [bodyid]
+
+    bodyid = np.asarray(bodyid).astype(int)
+
+    miss = ~ids_exist(bodyid, server=server, node=node)
+    new_ids = bodyid.copy()
+    conf = np.zeros(len(new_ids))
+    conf[miss] = 0
+
+    if any(miss):
+        info = get_segmentation_info(server, node)['Extended']
+        vsize = {'COARSE': [s * 8 for s in info['BlockSize']]}
+        vsize.update({i: np.array(info['VoxelSize']) * 2**i for i in range(info['MaxDownresLevel'])})
+
+        missing = bodyid[miss]
+
+        last_seen = find_lost_ids(missing, progress=progress, server=server, node=node)
+
+        miss_ix = np.where(miss)[0]
+        for i, ix in enumerate(tqdm(miss_ix, desc='Updating', leave=False, disable=not progress)):
+            sv = get_sparsevol(bodyid[ix], scale=scale, node=last_seen[i], server=server)
+
+            if sample:
+                sv = sv[:max(1, int(len(sv) * sample))]
+
+            _ids, _cnt = np.unique(locs_to_ids(sv * vsize[scale] / info['VoxelSize'],
+                                               progress=progress,
+                                               node=node, server=server),
+                                   return_counts=True)
+            srt = np.argsort(_cnt)[::-1]
+            new_ids[ix] = _ids[srt[0]]
+            if len(_ids) > 1:
+                conf[ix] = (_cnt[srt[0]] - _cnt[srt[1]]) / (_cnt[srt[0]] + _cnt[srt[1]])
+            else:
+                conf[ix] = 1
+
+    df = pd.DataFrame()
+    df['old_id'] = bodyid
+    df['new_id'] = new_ids
+    df['confidence'] = conf
+
+    return df

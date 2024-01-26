@@ -14,8 +14,8 @@ Want to query a neuPrint server instead? Check out
 - get/set neuron annotations (names)
 - download precomputed meshes, skeletons (SWCs) and ROIs
 - get basic neuron info (# of voxels/synapses)
-- get synapses
-- get connectivity (adjacency matrix, connectivity table)
+- fetch synapses
+- fetch connectivity (adjacency matrix, connectivity table)
 - retrieve labels (TODO, to split, etc)
 - map positions to body IDs
 - mesh or skeletonize sparsevols
