@@ -315,6 +315,8 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
     """
     if output == 'navis' and not navis:
         raise ImportError('Please install `navis`: pip3 install navis')
+    elif output == 'auto' and navis:
+        output = 'navis'
 
     if on_error not in ("warn", "skip", "raise"):
         raise ValueError('`on_error` must be either "warn", "skip" or "raise"')
@@ -363,11 +365,18 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
             for f in as_completed(futures):
                 res = f.result()
                 pbar.update(1)
-                if on_error == "skip" and res is None:
-                    continue
+                # If this neuron didn't produce a result
+                if res is None:
+                    # Skip entirely
+                    if on_error == "skip":
+                        continue
+                    # if just warn and output is supposed to be navis
+                    # return an empty neuron
+                    elif output == 'navis':
+                        res = navis.TreeNeuron(None, id=futures[f])
                 out.append(res)
 
-    if (output == 'auto' and navis) or (output == 'navis'):
+    if output == 'navis':
         out = navis.NeuronList(out)
 
     return out
