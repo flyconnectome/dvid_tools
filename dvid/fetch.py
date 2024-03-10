@@ -40,7 +40,7 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'get_body_position', 'get_connections',
            'get_connectivity', 'get_labels_in_area', 'get_last_mod',
            'locs_to_ids', 'get_n_synapses', 'get_roi', 'get_sparsevol',
-           'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
+           'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation', 'has_skeleton',
            'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body',
            'get_meshes', 'list_projects', 'get_master_node', 'get_sparsevol_size',
            'get_sizes', 'ids_exist', 'skeletonize_neuron', 'mesh_neuron',
@@ -448,6 +448,67 @@ def __get_skeleton(bodyid, save_to=None, output='auto', on_error='raise',
         return n
 
     return swc
+
+
+def has_skeleton(x, max_threads=10, progress=True, server=None, node=None):
+    """Check if given body has a skeleton.
+
+    Parameters
+    ----------
+    x :         int | str | list thereof
+                ID(s) of body to check.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    has_skeleton :  np.array
+                Contains True if body has a skeleton, False otherwise. Note
+                that False can also mean that the ID just doesn't exist. Use
+                ``dvidtools.ids_exist`` to check for that.
+
+    """
+    server, node, user = eval_param(server, node)
+
+    if isinstance(x, pd.DataFrame):
+        if "bodyId" in x.columns:
+            x = x["bodyId"].values
+        elif "bodyid" in x.columns:
+            x = x["bodyid"].values
+        else:
+            raise ValueError('DataFrame must have "bodyId" column.')
+    elif isinstance(x, int):
+        x = [x]
+    elif isinstance(x, str):
+        x = [int(x)]
+
+    base_url = urllib.parse.urljoin(server,
+                                    'api/node/{}/{}_skeletons/key'.format(node,
+                                                                           config.segmentation))
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        futures = {}
+        for bid in x:
+            f = executor.submit(_has_skeleton, url=f"{base_url}/{bid}_swc")
+            futures[f] = bid
+
+        with tqdm(
+            desc="Fetching", total=len(x), leave=False, disable=not progress
+        ) as pbar:
+            for f in as_completed(futures):
+                res = f.result()
+                pbar.update(1)
+                results[futures[f]] = res.status_code == 200
+
+    return np.array([results[bid] for bid in x])
+
+def _has_skeleton(url):
+    # No need to raise for status here
+    r = dvid_session().get(url)
+    return r
 
 
 def __old_get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
