@@ -1647,6 +1647,7 @@ def mesh_neuron(bodyid,
                 scale='COARSE',
                 step_size=1,
                 bbox=None,
+                on_error='raise',
                 parallel=False,
                 progress=True,
                 server=None,
@@ -1669,6 +1670,11 @@ def mesh_neuron(bodyid,
                 Bounding box to which to restrict the meshing to. Must be in
                 `scale=0` coordinates.
                 Format: ``[x_min, x_max, y_min, y_max, z_min, z_max]``.
+    on_error :  "raise" | "warn" | "ignore"
+                What to do if an error occurs. If "raise", will raise the
+                exception. If "warn", will print a warning and continue.
+                If "ignore", will ignore the error and continue. Note that 
+                for "warn" and "ignore" the function may return `None`.
     parallel :  bool | int
                 Whether to run meshing in parallel on multiple cores if
                 `bodyid` is more than one neuron. If `parallel` is integer will
@@ -1705,6 +1711,7 @@ def mesh_neuron(bodyid,
                            scale=scale,
                            step_size=step_size,
                            bbox=bbox,
+                           on_error=on_error,
                            server=server,
                            node=node,
                            **kwargs)
@@ -1732,36 +1739,43 @@ def mesh_neuron(bodyid,
                             pbar.update(1)
                 return meshes
 
-    bodyid = utils.parse_bid(bodyid)
+    try:
+        bodyid = utils.parse_bid(bodyid)
 
-    voxels = get_sparsevol(bodyid,
-                           scale=scale,
-                           ret_type='INDEX',
-                           save_to=None,
-                           bbox=bbox,
-                           server=server,
-                           node=node)
+        voxels = get_sparsevol(bodyid,
+                            scale=scale,
+                            ret_type='INDEX',
+                            save_to=None,
+                            bbox=bbox,
+                            server=server,
+                            node=node)
 
-    defaults = dict(chunk_size=200 if scale in (0, 1, 2, 3, 4) else None,
-                    merge_fragments=True,
-                    pad_chunks=True)
-    defaults.update(kwargs)
+        defaults = dict(chunk_size=200 if scale in (0, 1, 2, 3, 4) else None,
+                        merge_fragments=True,
+                        pad_chunks=True)
+        defaults.update(kwargs)
 
-    # Get voxel sizes based on scale
-    info = get_segmentation_info(server, node)['Extended']
+        # Get voxel sizes based on scale
+        info = get_segmentation_info(server, node)['Extended']
 
-    vsize = {'COARSE': [s * 8 for s in info['BlockSize']]}
-    vsize.update({i: np.array(info['VoxelSize']) * 2**i for i in range(info['MaxDownresLevel'])})
+        vsize = {'COARSE': [s * 8 for s in info['BlockSize']]}
+        vsize.update({i: np.array(info['VoxelSize']) * 2**i for i in range(info['MaxDownresLevel'])})
 
-    mesh = meshing.mesh_from_voxels(voxels,
-                                    spacing=vsize[scale],
-                                    step_size=step_size,
-                                    **defaults)
+        mesh = meshing.mesh_from_voxels(voxels,
+                                        spacing=vsize[scale],
+                                        step_size=step_size,
+                                        **defaults)
 
-    # Track the ID just in case
-    mesh.id = bodyid
+        # Track the ID just in case
+        mesh.id = bodyid
 
-    return mesh
+        return mesh
+    except BaseException:
+        if on_error == 'raise':
+            raise
+        elif on_error == 'warn':
+            warnings.warn(f'Error meshing {bodyid}.')
+        return None        
 
 
 @lru_cache(None)
