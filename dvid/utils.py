@@ -522,7 +522,7 @@ def make_url(*args, **GET):
         arg_str = str(arg)
         joiner = '' if url.endswith('/') else '/'
         relative = arg_str[1:] if arg_str.startswith('/') else arg_str
-        url = requests.compat.urljoin(url + joiner, relative)
+        url = url + joiner + relative
     if GET:
         url += '?{}'.format(urllib.parse.urlencode(GET))
     return url
