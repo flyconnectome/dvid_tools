@@ -13,17 +13,17 @@ Want to query a neuPrint server instead? Check out
 - get/set user bookmarks
 - get/set neuron annotations (names)
 - download precomputed meshes, skeletons (SWCs) and ROIs
+- generate meshes or skeletons from scratch
 - get basic neuron info (# of voxels/synapses)
 - fetch synapses
 - fetch connectivity (adjacency matrix, connectivity table)
 - retrieve labels (TODO, to split, etc)
 - map positions to body IDs
-- mesh or skeletonize sparsevols
 - detect potential open ends (based on a script by [Stephen Plaza](https://github.com/stephenplaza))
 
 ## Install
 
-Make sure you have [Python 3](https://www.python.org) (3.6 or later),
+Make sure you have [Python 3](https://www.python.org) (3.8 or later),
 [pip](https://pip.pypa.io/en/stable/installing/). Then run this:
 
 ```bash
