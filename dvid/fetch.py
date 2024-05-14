@@ -40,7 +40,8 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'get_body_position', 'get_connections',
            'get_connectivity', 'get_labels_in_area', 'get_last_mod',
            'locs_to_ids', 'get_n_synapses', 'get_roi', 'get_sparsevol',
-           'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation', 'has_skeleton',
+           'get_segmentation_info', 'get_skeletons', 'get_skeleton_mutation',
+           'has_skeleton', 'has_mesh',
            'get_synapses', 'get_user_bookmarks', 'setup', 'snap_to_body',
            'get_meshes', 'list_projects', 'get_master_node', 'get_sparsevol_size',
            'get_sizes', 'ids_exist', 'skeletonize_neuron', 'mesh_neuron',
@@ -175,27 +176,34 @@ def get_meshes(x, fix=True, output='auto', on_error='warn',
     if not isinstance(x, (list, set, np.ndarray)):
         raise TypeError(f'Unexpected data type for body ID(s): "{type(x)}"')
 
-    out = []
-    with ThreadPoolExecutor(max_workers=max_threads) as executor:
-        futures = {}
-        for bid in x:
-            f = executor.submit(__get_ngmesh,
-                                bid,
-                                output=output,
-                                on_error=on_error,
-                                server=server, node=node)
-            futures[f] = bid
+    if len(x) > 1:
+        out = []
+        with ThreadPoolExecutor(max_workers=max_threads) as executor:
+            futures = {}
+            for bid in x:
+                f = executor.submit(__get_ngmesh,
+                                    bid,
+                                    output=output,
+                                    on_error=on_error,
+                                    server=server, node=node)
+                futures[f] = bid
 
-        with tqdm(desc='Fetching',
-                  total=len(x),
-                  leave=False,
-                  disable=not progress) as pbar:
-            for f in as_completed(futures):
-                res = f.result()
-                # Skip neurons that caused an error
-                if res is not None:
-                    out.append(res)
-                pbar.update(1)
+            with tqdm(desc='Fetching',
+                    total=len(x),
+                    leave=False,
+                    disable=not progress) as pbar:
+                for f in as_completed(futures):
+                    res = f.result()
+                    # Skip neurons that caused an error
+                    if res is not None:
+                        out.append(res)
+                    pbar.update(1)
+    else:
+        out = [__get_ngmesh(x[0], output=output, on_error=on_error,
+                           server=server, node=node)]
+
+    # Drop `None`
+    out = [o for o in out if o is not None]
 
     if (output == 'auto' and navis) or (output == 'navis'):
         out = navis.NeuronList(out)
@@ -246,6 +254,67 @@ def __get_ngmesh(bodyid, output='auto', on_error='raise',
         return n
 
     return m
+
+
+def has_mesh(x, max_threads=10, progress=True, server=None, node=None):
+    """Check if given body has a mesh.
+
+    Parameters
+    ----------
+    x :         int | str | list thereof
+                ID(s) of body to check.
+    server :    str, optional
+                If not provided, will try reading from global.
+    node :      str, optional
+                If not provided, will try reading from global.
+
+    Returns
+    -------
+    has_mesh :  np.array
+                Contains True if body has a mesh, False otherwise. Note
+                that False can also mean that the ID just doesn't exist. Use
+                ``dvidtools.ids_exist`` to check for that.
+
+    """
+    server, node, user = eval_param(server, node)
+
+    if isinstance(x, pd.DataFrame):
+        if "bodyId" in x.columns:
+            x = x["bodyId"].values
+        elif "bodyid" in x.columns:
+            x = x["bodyid"].values
+        else:
+            raise ValueError('DataFrame must have "bodyId" column.')
+    elif isinstance(x, int):
+        x = [x]
+    elif isinstance(x, str):
+        x = [int(x)]
+
+    base_url = urllib.parse.urljoin(server,
+                                    'api/node/{}/{}_meshes/key'.format(node,
+                                                                           config.segmentation))
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        futures = {}
+        for bid in x:
+            f = executor.submit(_has_mesh, url=f"{base_url}/{bid}.ngmesh")
+            futures[f] = bid
+
+        with tqdm(
+            desc="Checking", total=len(x), leave=False, disable=not progress
+        ) as pbar:
+            for f in as_completed(futures):
+                pbar.update(1)
+                results[futures[f]] = f.result() == 200
+
+    return np.array([results[bid] for bid in x])
+
+
+def _has_mesh(url):
+    # No need to raise for status here
+    r = dvid_session().head(url)
+    return r.status_code
 
 
 def get_skeletons(x, save_to=None, output='auto', on_error='warn',
@@ -499,16 +568,16 @@ def has_skeleton(x, max_threads=10, progress=True, server=None, node=None):
             desc="Fetching", total=len(x), leave=False, disable=not progress
         ) as pbar:
             for f in as_completed(futures):
-                res = f.result()
                 pbar.update(1)
-                results[futures[f]] = res.status_code == 200
+                results[futures[f]] = f.result() == 200
 
     return np.array([results[bid] for bid in x])
 
+
 def _has_skeleton(url):
     # No need to raise for status here
-    r = dvid_session().get(url)
-    return r
+    r = dvid_session().head(url)
+    return r.status_code
 
 
 def __old_get_skeleton(bodyid, save_to=None, xform=None, root=None, soma=None,
@@ -1673,7 +1742,7 @@ def mesh_neuron(bodyid,
     on_error :  "raise" | "warn" | "ignore"
                 What to do if an error occurs. If "raise", will raise the
                 exception. If "warn", will print a warning and continue.
-                If "ignore", will ignore the error and continue. Note that 
+                If "ignore", will ignore the error and continue. Note that
                 for "warn" and "ignore" the function may return `None`.
     parallel :  bool | int
                 Whether to run meshing in parallel on multiple cores if
@@ -1775,7 +1844,7 @@ def mesh_neuron(bodyid,
             raise
         elif on_error == 'warn':
             warnings.warn(f'Error meshing {bodyid}.')
-        return None        
+        return None
 
 
 @lru_cache(None)
