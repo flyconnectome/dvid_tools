@@ -318,8 +318,8 @@ def _has_mesh(url):
 
 
 def get_skeletons(x, save_to=None, output='auto', on_error='warn',
-                  check_mutation=False, max_threads=5, progress=True,
-                  server=None, node=None):
+                  check_mutation=False, max_threads=5, timeout=None,
+                  progress=True, server=None, node=None):
     """Fetch skeleton for given body ID.
 
     Parameters
@@ -348,6 +348,8 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
                     using the mutation IDs. Will warn if mismatch found.
     max_threads :   int
                     Max number of parallel queries to the dvid server.
+    timeout :       int, optional
+                    Set timeout in seconds for each request.
     progress :      bool
                     Whether to show a progress bar or not.
     server :        str, optional
@@ -424,6 +426,7 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
                                 output=output,
                                 on_error=on_error,
                                 check_mutation=check_mutation,
+                                timeout=timeout,
                                 server=server, node=node)
             futures[f] = bid
 
@@ -452,7 +455,7 @@ def get_skeletons(x, save_to=None, output='auto', on_error='warn',
 
 
 def __get_skeleton(bodyid, save_to=None, output='auto', on_error='raise',
-                   check_mutation=False, server=None, node=None):
+                   check_mutation=False, timeout=None, server=None, node=None):
     """Load a single skeleton."""
     bodyid = utils.parse_bid(bodyid)
 
@@ -464,7 +467,7 @@ def __get_skeleton(bodyid, save_to=None, output='auto', on_error='raise',
                                                                             bodyid))
 
     try:
-        r = dvid_session().get(url)
+        r = dvid_session().get(url, timeout=timeout)
         r.raise_for_status()
     except BaseException:
         if on_error == 'raise':
