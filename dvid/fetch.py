@@ -48,6 +48,16 @@ __all__ = ['add_bookmarks', 'edit_annotation', 'get_adjacency', 'get_annotation'
            'find_lost_ids', 'update_ids', "get_branch_history"]
 
 
+# Set a global timeout for all requests
+HTTP_TIMEOUT = 60
+
+
+class TimeoutRequestsSession(requests.Session):
+    def request(self, *args, **kwargs):
+        kwargs.setdefault("timeout", HTTP_TIMEOUT)
+        return super(TimeoutRequestsSession, self).request(*args, **kwargs)
+
+
 def dvid_session(appname=DEFAULT_APPNAME, user=None):
     """Return a default requests.Session() object.
 
@@ -68,7 +78,7 @@ def dvid_session(appname=DEFAULT_APPNAME, user=None):
     try:
         s = DVID_SESSIONS[(appname, user, thread_id, pid)]
     except KeyError:
-        s = requests.Session()
+        s = TimeoutRequestsSession()
         s.params = {'u': user, 'app': appname}
         DVID_SESSIONS[(appname, user, thread_id, pid)] = s
 
