@@ -294,7 +294,7 @@ def parse_swc_str(x):
 
     # Turn SWC into a DataFrame
     f = StringIO(x)
-    df = pd.read_csv(f, delim_whitespace=True, header=None, comment='#')
+    df = pd.read_csv(f, sep='\s+', header=None, comment='#')
 
     df.columns = ['node_id', 'label', 'x', 'y', 'z', 'radius', 'parent_id']
 
