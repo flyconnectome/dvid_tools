@@ -1799,7 +1799,7 @@ def mesh_neuron(bodyid,
                 with ProcessPoolExecutor(max_workers=n_cores) as executor:
                     futures = {}
                     for bid in bodyid:
-                        f = executor.submit(func, bid)
+                        f = executor.submit(func, bid, progress=False)
                         futures[f] = bid
 
                     with tqdm(desc='Meshing',
@@ -1836,9 +1836,10 @@ def mesh_neuron(bodyid,
         mesh = meshing.mesh_from_voxels(voxels,
                                         spacing=vsize[scale],
                                         step_size=step_size,
+                                        progress=progress,
                                         **defaults)
 
-        # Track the ID just in case
+        # Track the ID in case we need it later
         mesh.id = bodyid
 
         return mesh
