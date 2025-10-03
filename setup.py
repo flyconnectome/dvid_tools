@@ -51,7 +51,7 @@ setup(
         'Programming Language :: Python :: 3.11',
     ],
     install_requires=requirements,
-    python_requires='>=3.8',
+    python_requires='>=3.9',
     extras_require={'extras': ['scikit-learn==0.20.3']},
     include_package_data=True,
     zip_safe=False
