@@ -100,6 +100,10 @@ def setup(server=None, node=None, user=None):
     """
     for p, n in zip([server, node, user], ['server', 'node', 'user']):
         if not isinstance(p, type(None)):
+            # Strip trailing slashes from server URL
+            if n == 'server':
+                p = p.rstrip('/')
+
             globals()[n] = p
 
 
@@ -110,6 +114,9 @@ def eval_param(server=None, node=None, user=None, raise_missing=True):
         if isinstance(p, type(None)):
             parsed.append(globals().get(n, None))
         else:
+            # Strip trailing slashes from server URL
+            if n == 'server' and isinstance(p, str):
+                p = p.rstrip('/')
             parsed.append(p)
 
     if raise_missing and not parsed[0]:
