@@ -96,8 +96,15 @@ def read_ngmesh(f, fix=True):
     m = tm.Trimesh(vertices=vertices, faces=faces)
 
     if fix:
-        m.remove_degenerate_faces()
-        m.remove_duplicate_faces()
+        # Cater for older and newer versions of trimesh
+        if hasattr(m, 'remove_degenerate_faces'):
+            m.remove_degenerate_faces()
+        else:
+            m.update_faces(m.nondegenerate_faces())
+        if hasattr(m, 'remove_duplicate_faces'):
+            m.remove_duplicate_faces()
+        else:
+            m.update_faces(m.unique_faces())
         m.remove_infinite_values()
         m.remove_unreferenced_vertices()
         m.merge_vertices()
