@@ -1510,12 +1510,9 @@ def get_roi(roi, step_size=2, form='MESH', save_to=None, server=None, node=None)
     return mesh
 
 
-def skeletonize_neuron(bodyid,
-                       scale=4,
-                       server=None,
-                       node=None,
-                       progress=True,
-                       **kwargs):
+def skeletonize_neuron(
+    bodyid, scale=4, server=None, node=None, progress=True, **kwargs
+):
     """Skeletonize given body.
 
     Fetches voxels from DVID, creates a mesh (via `mesh_neuron`) and then
@@ -1527,16 +1524,16 @@ def skeletonize_neuron(bodyid,
 
     Parameters
     ----------
-    bodyid :    int | str | trimesh
-                ID of body for which to generate skeleton.
+    bodyid :    int | str | list-like | trimesh
+                Body ID(s) for which to generate skeleton(s).
     scale :     int | "COARSE"
                 Resolution of sparse volume to use for skeletonization.
                 Lower = higher res. Higher resolutions tend to produce more
                 accurate but also more noisy (e.g. tiny free-floating fragments)
                 skeletons. In my experience, `scale="COARSE"` for quick & dirty
                 and `scale=4` for high-quality skeletons make the most sense.
-                Scales 5 and 6 are too coarse, and below 3 becomes prohibitively
-                slow.
+                Scales 5 and 6 are too coarse, and values lower than 3 become
+                really slow.
     server :    str, optional
                 If not provided, will try reading from global.
     node :      str, optional
@@ -1549,7 +1546,8 @@ def skeletonize_neuron(bodyid,
     Returns
     -------
     skeletor.Skeleton
-                In "nm" coordinates.
+                In "nm" coordinates. If `bodyid` is a list, will return a dict mapping
+                body IDs to skeletons.
 
     See Also
     --------
@@ -1560,9 +1558,17 @@ def skeletonize_neuron(bodyid,
     try:
         import skeletor as sk
     except ImportError:
-        raise ImportError('`skeletonize_neuron` requires `skeletor` to be installed')
+        raise ImportError("`skeletonize_neuron` requires `skeletor` to be installed")
     except BaseException:
         raise
+
+    if isinstance(bodyid, (list, tuple, np.ndarray)):
+        return {
+            b: skeletonize_neuron(
+                b, scale=scale, server=server, node=node, progress=progress, **kwargs
+            )
+            for b in tqdm(bodyid, desc="Skeletonizing neurons", disable=not progress)
+        }
 
     defaults = dict(step_size=1)
     defaults.update(kwargs)
@@ -1571,14 +1577,12 @@ def skeletonize_neuron(bodyid,
     if isinstance(bodyid, tm.Trimesh):
         mesh = bodyid
     else:
-        mesh = mesh_neuron(bodyid, scale=scale,
-                           server=server, node=node,
-                           progress=progress,
-                           **defaults)
+        mesh = mesh_neuron(
+            bodyid, scale=scale, server=server, node=node, progress=progress, **defaults
+        )
 
     # Skeletonize
-    return sk.skeletonize.by_wavefront(mesh, radius_agg='median',
-                                       progress=progress)
+    return sk.skeletonize.by_wavefront(mesh, radius_agg="median", progress=progress)
 
 
 def get_sparsevol_size(bodyid, server=None, node=None):
