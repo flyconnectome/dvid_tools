@@ -1572,7 +1572,7 @@ def get_available_rois(server=None, node=None, step_size=2):
 def get_roi(roi, step_size=2, form="MESH", save_to=None, server=None, node=None):
     """Get ROI as mesh or voxels.
 
-    Uses marching cube algorithm to extract surface model of ROI voxels if no
+    Uses sparse-cubes to extract a surface model of the ROI voxels if no
     precomputed mesh available.
 
     Note that some ROIs exist only as voxels or as mesh. If voxels are requested
@@ -1585,7 +1585,7 @@ def get_roi(roi, step_size=2, form="MESH", save_to=None, server=None, node=None)
     form :          "MESH" | "VOXELS"| "BLOCKS", optional
                     Returned format - see ``Returns``.
     step_size :     int, optional
-                    Step size for marching cube algorithm. Only relevant for
+                    Step size for the meshing. Only relevant for
                     ``form="MESH"``. Smaller values = higher resolution but
                     slower.
     save_to :       filename
@@ -1936,8 +1936,8 @@ def mesh_neuron(
                 beyond 0 has 1/2 resolution of previous level. "COARSE" will
                 return the volume in block coordinates.
     step_size : int, optional
-                Step size for marching cube algorithm.
-                Higher values = faster but coarser.
+                Step size for the meshing. Higher values downsample the
+                voxels first (= faster but coarser).
     bbox :      list | None, optional
                 Bounding box to which to restrict the meshing to. Must be in
                 `scale=0` coordinates.
@@ -2034,13 +2034,6 @@ def mesh_neuron(
             node=node,
         )
 
-        defaults = dict(
-            chunk_size=200 if scale in (0, 1, 2, 3, 4) else None,
-            merge_fragments=True,
-            pad_chunks=True,
-        )
-        defaults.update(kwargs)
-
         # Get voxel sizes based on scale
         info = get_segmentation_info(server, node)["Extended"]
 
@@ -2056,8 +2049,7 @@ def mesh_neuron(
             voxels,
             spacing=vsize[scale],
             step_size=step_size,
-            progress=progress,
-            **defaults,
+            **kwargs,
         )
 
         # Track the ID in case we need it later
