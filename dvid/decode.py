@@ -37,26 +37,30 @@ def decode_sparsevol(b, format='rles', voxels=True):
                                         'reserved', 'n_blocks', 'n_spans'],
                                        struct.unpack('bbbbii', b[:12]))}
 
+        rles = np.frombuffer(b, '<i4', offset=12,
+                             count=header['n_spans'] * 4).reshape(-1, 4)
+
         if voxels:
-            coords = []
-            for i in range(header['n_spans']):
-                offset = 12 + (i * 16)
-                x, y, z, run_len = struct.unpack('iiii', b[offset: offset + 16])
+            # Run lengths as int64 to avoid overflowing the cumulative sum
+            run_len = rles[:, 3].astype(np.int64)
+            n_voxels = int(run_len.sum())
 
-                this_run = np.array([[x, y, z]] * run_len, dtype='uint32')
-                this_run[:, 0] = np.arange(x, x + run_len)
+            coords = np.empty((n_voxels, 3), dtype='uint32')
 
-                coords.append(this_run)
+            # y and z are constant within a run
+            coords[:, 1] = np.repeat(rles[:, 1], run_len)
+            coords[:, 2] = np.repeat(rles[:, 2], run_len)
 
-            if len(coords):
-                coords = np.concatenate(coords)
-            else:
-                coords = np.zeros((0, 3))
+            # x runs from `x` to `x + run_len`: add the index within each run
+            # (a global arange minus the repeated offset at which the run
+            # starts) to the repeated run start. Both terms stay non-negative,
+            # so this is safe in uint32.
+            offsets = (np.cumsum(run_len) - run_len).astype('uint32')
+            coords[:, 0] = np.arange(n_voxels, dtype='uint32')
+            coords[:, 0] -= np.repeat(offsets, run_len)
+            coords[:, 0] += np.repeat(rles[:, 0].astype('uint32'), run_len)
         else:
-            coords = np.zeros((header['n_spans'], 4), dtype='uint32')
-            for i in range(header['n_spans']):
-                offset = 12 + (i * 16)
-                coords[i, :] = struct.unpack('iiii', b[offset: offset + 16])
+            coords = rles
         return header, coords
     elif format == 'blocks':
         raise ValueError('Format "blocks" not yet implemented.')
